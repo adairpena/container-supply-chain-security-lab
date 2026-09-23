@@ -1,13 +1,109 @@
-# Proyecto de Seguridad de Imágenes con Trivy
+# Proyecto de Seguridad de Cadena de Suministro de Imágenes
+
+Laboratorio práctico para analizar, documentar y controlar la seguridad de imágenes de contenedor antes de su despliegue en Kubernetes.
+
+El proyecto se desarrolla de forma **manual, reproducible y documentada**, sin integración CI/CD, con tres componentes principales:
+
+- **Trivy**: escaneo de vulnerabilidades, generación de reportes, SBOM y detección de secretos.
+- **Connaisseur**: admission controller para aplicar políticas de confianza antes de crear workloads en Kubernetes.
+- **Cosign**: firma y verificación criptográfica de imágenes. Esta fase se encuentra pendiente y se integrará posteriormente con Connaisseur.
+
+> El objetivo del laboratorio es comprender cada control de forma independiente antes de automatizarlo.
+
+---
+
+## Estado del proyecto
+
+| Fase | Estado | Evidencia principal |
+|---|---|---|
+| Trivy | ✅ Completada | JSON, HTML, SBOM, secret scanning y análisis de capas |
+| Connaisseur base | ✅ Completada | Helm, webhook, namespace protegido, ACCEPT/DENY y trust pinning |
+| Cosign | ⏳ Pendiente | Par de claves, firma y verificación manual |
+| Integración Cosign + Connaisseur | ⏳ Pendiente | Validación con `cosign.pub` y demos con imágenes propias |
+
+---
+
+## Arquitectura general
+
+```text
+                         IMAGEN OCI
+                             |
+                 +-----------+-----------+
+                 |                       |
+                 v                       v
+               TRIVY                   COSIGN
+                 |                       |
+        +--------+--------+              |
+        |        |        |              |
+        v        v        v              v
+      CVEs      SBOM   Secretos        Firma
+        |                               |
+        v                               v
+ Evaluación manual                  Registry OCI
+        |                               |
+        +---------------+---------------+
+                        |
+                        v
+                  Kubernetes API
+                        |
+                        v
+                  CONNAISSEUR
+                        |
+                  +-----+-----+
+                  |           |
+                  v           v
+                ACCEPT       DENY
+                  |           |
+                  v           X
+            Workload creado  Bloqueado
+```
+
+Actualmente el flujo Trivy y el enforcement base de Connaisseur están implementados. La firma propia con Cosign se integrará en la siguiente fase.
+
+---
+
+## Estructura actual del repositorio
+
+```text
+proyecto-trivy-cosign/
+├── README.md
+├── .gitignore
+├── demo-secret/
+│   ├── Containerfile
+│   └── trivy-secret.yaml
+├── docs/
+├── evidence/
+│   ├── trivy/
+│   └── connaisseur/
+├── k8s-ansible/
+├── keys/
+├── kubernetes/
+│   └── connaisseur/
+│       └── values.yaml
+├── reports/
+│   ├── html/
+│   ├── json/
+│   ├── sbom/
+│   └── secrets/
+└── scripts/
+    └── scan-image.sh
+```
+
+> `keys/` está reservada para la fase Cosign. Las claves privadas no deben versionarse.
+
+---
+
+
+## Fase 1 — Trivy: vulnerabilidades, SBOM y secretos
 
 Proyecto para analizar vulnerabilidades, generar reportes y documentar criterios de revisión de imágenes de contenedor con **Trivy**.
 
-> Este proyecto forma parte de una práctica de seguridad de cadena de suministro de software.  
+> Este proyecto forma parte de una práctica de seguridad de cadena de suministro de software.
 > En esta primera fase no se utiliza CI/CD: todo el proceso de análisis es **manual, reproducible y documentado**.
 
 ---
 
-## 1. Objetivo
+#### 1. Objetivo
 
 El objetivo de esta fase es utilizar Trivy para:
 
@@ -37,7 +133,7 @@ para demostrar detección de secretos.
 
 ---
 
-## 2. Arquitectura del Proyecto
+#### 2. Arquitectura del Proyecto
 
 El flujo de esta fase es:
 
@@ -66,12 +162,12 @@ El flujo de esta fase es:
   Aceptar    Rechazar
 ```
 
-Trivy no decide por sí mismo si una imagen debe desplegarse.  
+Trivy no decide por sí mismo si una imagen debe desplegarse.
 El resultado técnico debe ser interpretado mediante un criterio de aceptación definido por la organización.
 
 ---
 
-## 3. Requisitos
+#### 3. Requisitos
 
 Proyecto utilizado:
 
@@ -102,9 +198,9 @@ jq --version
 
 ---
 
-# 4. Instalación de Trivy
+### 4. Instalación de Trivy
 
-## 4.1 Crear el repositorio oficial
+#### 4.1 Crear el repositorio oficial
 
 En Rocky Linux, RHEL o sistemas compatibles:
 
@@ -145,7 +241,7 @@ https://www.trivy.dev/docs/latest/getting-started/installation/
 
 ---
 
-# 5. Preparar Podman para imágenes locales
+### 5. Preparar Podman para imágenes locales
 
 Trivy puede analizar imágenes desde diferentes fuentes, incluyendo:
 
@@ -188,7 +284,7 @@ https://trivy.dev/docs/dev/guide/target/container_image/
 
 ---
 
-# 6. Descargar imágenes de prueba
+### 6. Descargar imágenes de prueba
 
 Descargar Nginx:
 
@@ -216,7 +312,7 @@ podman images
 
 ---
 
-# 7. Escaneo manual básico
+### 7. Escaneo manual básico
 
 El comando más simple es:
 
@@ -237,7 +333,7 @@ Trivy descargará o actualizará su base de vulnerabilidades cuando sea necesari
 
 ---
 
-# 8. Escanear vulnerabilidades HIGH y CRITICAL
+### 8. Escanear vulnerabilidades HIGH y CRITICAL
 
 Para mostrar únicamente vulnerabilidades de severidad alta o crítica:
 
@@ -265,7 +361,7 @@ Además, Trivy identificó que la imagen utiliza una versión antigua de Alpine 
 
 ---
 
-# 9. Generar reporte JSON
+### 9. Generar reporte JSON
 
 Para Nginx:
 
@@ -305,7 +401,7 @@ trivy image \
 
 ---
 
-# 10. Generar reportes HTML
+### 10. Generar reportes HTML
 
 La instalación RPM utilizada en este Proyecto incluye el template:
 
@@ -362,7 +458,7 @@ Los tres reportes HTML son parte de los entregables del proyecto.
 
 ---
 
-# 11. Generar SBOM CycloneDX
+### 11. Generar SBOM CycloneDX
 
 Trivy puede generar un inventario de componentes de software en formato CycloneDX.
 
@@ -407,7 +503,7 @@ jq . reports/sbom/nginx.cdx.json | head -50
 
 ---
 
-# 12. Script para escaneo manual
+### 12. Script para escaneo manual
 
 El proyecto contiene:
 
@@ -415,7 +511,7 @@ El proyecto contiene:
 scripts/scan-image.sh
 ```
 
-El script automatiza únicamente la ejecución manual de Trivy.  
+El script automatiza únicamente la ejecución manual de Trivy.
 No forma parte de un pipeline CI/CD.
 
 Uso:
@@ -453,11 +549,11 @@ chmod 750 scripts/scan-image.sh
 
 ---
 
-# 13. Procedimiento manual recomendado
+### 13. Procedimiento manual recomendado
 
 Para analizar una nueva imagen:
 
-## Paso 1. Obtener la imagen
+#### Paso 1. Obtener la imagen
 
 ```bash
 podman pull <imagen>:<tag>
@@ -469,19 +565,19 @@ Ejemplo:
 podman pull nginx:latest
 ```
 
-## Paso 2. Confirmar que existe
+#### Paso 2. Confirmar que existe
 
 ```bash
 podman images
 ```
 
-## Paso 3. Ejecutar Trivy
+#### Paso 3. Ejecutar Trivy
 
 ```bash
 ./scripts/scan-image.sh <imagen>:<tag>
 ```
 
-## Paso 4. Revisar reporte HTML
+#### Paso 4. Revisar reporte HTML
 
 Abrir:
 
@@ -489,7 +585,7 @@ Abrir:
 reports/html/
 ```
 
-## Paso 5. Revisar HIGH y CRITICAL
+#### Paso 5. Revisar HIGH y CRITICAL
 
 ```bash
 trivy image \
@@ -500,7 +596,7 @@ trivy image \
   <imagen>:<tag>
 ```
 
-## Paso 6. Revisar si existe versión corregida
+#### Paso 6. Revisar si existe versión corregida
 
 Consultar las columnas:
 
@@ -510,7 +606,7 @@ Fixed Version
 Status
 ```
 
-## Paso 7. Aplicar el criterio de aceptación
+#### Paso 7. Aplicar el criterio de aceptación
 
 Registrar:
 
@@ -527,7 +623,7 @@ Justificación
 
 ---
 
-# 14. Cómo interpretar los resultados
+### 14. Cómo interpretar los resultados
 
 Un reporte de Trivy puede incluir campos como:
 
@@ -541,35 +637,35 @@ Un reporte de Trivy puede incluir campos como:
 | Status | Estado conocido de la vulnerabilidad |
 | Title | Descripción resumida |
 
-## Severidades
+#### Severidades
 
-### CRITICAL
+##### CRITICAL
 
 Representa hallazgos de máxima prioridad.
 
 No significa automáticamente que la vulnerabilidad sea explotable en el contexto específico de la aplicación, pero debe investigarse inmediatamente.
 
-### HIGH
+##### HIGH
 
 Vulnerabilidad de alta severidad.
 
 Debe evaluarse antes de aprobar el artefacto para despliegue.
 
-### MEDIUM
+##### MEDIUM
 
 Normalmente requiere seguimiento y planificación de remediación.
 
-### LOW
+##### LOW
 
 Debe mantenerse inventariada y revisarse según la política definida.
 
-### UNKNOWN
+##### UNKNOWN
 
 Trivy dispone del hallazgo pero no cuenta con una severidad suficiente o normalizada para clasificarlo.
 
 ---
 
-# 15. Fixed Version
+### 15. Fixed Version
 
 Uno de los campos más importantes es:
 
@@ -603,7 +699,7 @@ volver a ejecutar Trivy
 
 ---
 
-# 16. Criterio de aceptación del Proyecto
+### 16. Criterio de aceptación del Proyecto
 
 El criterio definido para este proyecto es:
 
@@ -622,7 +718,7 @@ Trivy identifica vulnerabilidades; **la decisión de riesgo sigue siendo respons
 
 ---
 
-# 17. Imagen fuera de soporte
+### 17. Imagen fuera de soporte
 
 Durante las pruebas se utilizó:
 
@@ -658,7 +754,7 @@ volver a escanear
 
 ---
 
-# 18. Secret scanning
+### 18. Secret scanning
 
 Trivy también puede analizar secretos.
 
@@ -708,7 +804,7 @@ trivy image \
 
 ---
 
-# 19. Demostración de capas OCI
+### 19. Demostración de capas OCI
 
 Se creó posteriormente:
 
@@ -753,7 +849,7 @@ Esto demuestra por qué una credencial no debe incorporarse a una imagen pensand
 
 ---
 
-# 20. Buenas prácticas
+### 20. Buenas prácticas
 
 - No usar `latest` para artefactos productivos sin control adicional.
 - Mantener actualizadas las imágenes base.
@@ -770,7 +866,7 @@ Esto demuestra por qué una credencial no debe incorporarse a una imagen pensand
 
 ---
 
-# 21. Frecuencia recomendada
+### 21. Frecuencia recomendada
 
 Para este Proyecto se documenta el siguiente esquema:
 
@@ -795,7 +891,7 @@ Una herramienta de análisis no sustituye el proceso de gestión de vulnerabilid
 
 ---
 
-# 22. Estructura del proyecto
+### 22. Estructura del proyecto
 
 ```text
 proyecto-trivy-cosign/
@@ -822,20 +918,20 @@ proyecto-trivy-cosign/
 └── keys/
 ```
 
-> La carpeta `keys/` se utilizará posteriormente en la fase de Cosign.  
+> La carpeta `keys/` se utilizará posteriormente en la fase de Cosign.
 > Las claves privadas nunca deben almacenarse en Git.
 
 ---
 
-# 23. Evidencias generadas
+### 23. Evidencias generadas
 
-## Vulnerabilidades
+#### Vulnerabilidades
 
 ```text
 reports/json/
 ```
 
-## Reportes HTML
+#### Reportes HTML
 
 ```text
 reports/html/
@@ -849,7 +945,7 @@ python:3.4-alpine
 debian:11
 ```
 
-## SBOM
+#### SBOM
 
 ```text
 reports/sbom/
@@ -861,13 +957,13 @@ Formato:
 CycloneDX JSON
 ```
 
-## Secret scanning
+#### Secret scanning
 
 ```text
 reports/secrets/
 ```
 
-## Evidencia adicional
+#### Evidencia adicional
 
 ```text
 evidence/trivy/
@@ -875,9 +971,9 @@ evidence/trivy/
 
 ---
 
-# 24. Troubleshooting
+### 24. Troubleshooting
 
-## Error: no podman socket found
+#### Error: no podman socket found
 
 Ejemplo:
 
@@ -906,7 +1002,7 @@ Utilizar explícitamente:
 
 ---
 
-## Error: unable to write results
+#### Error: unable to write results
 
 Verificar el directorio actual:
 
@@ -928,7 +1024,7 @@ mkdir -p reports/{json,html,sbom,secrets}
 
 ---
 
-## Trivy no encuentra una imagen local
+#### Trivy no encuentra una imagen local
 
 Comprobar:
 
@@ -947,11 +1043,11 @@ trivy image \
 
 ---
 
-# 25. Relación con ISO/IEC 27001:2022
+### 25. Relación con ISO/IEC 27001:2022
 
 Esta fase genera evidencia principalmente para:
 
-### A.8.8 - Gestión de vulnerabilidades técnicas
+##### A.8.8 - Gestión de vulnerabilidades técnicas
 
 Evidencia:
 
@@ -960,7 +1056,7 @@ Evidencia:
 - tratamiento documentado;
 - reescaneo.
 
-### A.8.29 - Pruebas de seguridad en desarrollo y aceptación
+##### A.8.29 - Pruebas de seguridad en desarrollo y aceptación
 
 Evidencia:
 
@@ -968,13 +1064,13 @@ Evidencia:
 - análisis previo al despliegue;
 - decisión documentada.
 
-### A.5.9 - Inventario de información y activos asociados
+##### A.5.9 - Inventario de información y activos asociados
 
 Evidencia:
 
 - SBOM CycloneDX de las imágenes.
 
-### A.8.12 - Prevención de fuga de datos
+##### A.8.12 - Prevención de fuga de datos
 
 Evidencia:
 
@@ -984,49 +1080,1070 @@ Evidencia:
 
 ---
 
-# 26. Alcance actual
+---
 
-Esta fase cubre exclusivamente **Trivy**.
+## Fase 2 — Connaisseur: admission control en Kubernetes
 
-Fases posteriores del proyecto:
+Este documento describe la instalación, configuración y validación de **Connaisseur** como admission controller para verificar la confianza de imágenes de contenedor antes de permitir su despliegue en Kubernetes.
+
+La configuración documentada corresponde al laboratorio realizado con:
+
+- Kubernetes `v1.36.4`
+- Helm `v3.22.0`
+- Connaisseur Chart `2.13.0`
+- Connaisseur App `3.13.0`
+- Runtime: `containerd`
+- CNI: `Flannel`
+- Namespace de pruebas: `supply-chain-demo`
+
+> Esta fase demuestra el funcionamiento del admission controller con la configuración de prueba incluida por Connaisseur. La integración con una clave propia de **Cosign** se realizará en una fase posterior.
+
+---
+
+### 1. Objetivo
+
+El objetivo de esta fase es implementar un control de admisión en Kubernetes que permita:
+
+- Instalar Connaisseur mediante Helm.
+- Configurar validación de imágenes por namespace.
+- Interceptar solicitudes `CREATE` y `UPDATE`.
+- Aceptar imágenes cuya firma sea válida y confiable.
+- Rechazar imágenes que no cumplan con la política de confianza.
+- Demostrar *trust pinning* mediante referencias por digest SHA-256.
+- Generar evidencia técnica del proceso.
+
+Flujo general:
 
 ```text
-Trivy
+Usuario
    |
    v
-Cosign
+kubectl apply / kubectl run
    |
    v
-Connaisseur
+Kubernetes API Server
    |
    v
-Kubernetes admission control
+Connaisseur Admission Webhook
+   |
+   +---------------------------+
+   |                           |
+   v                           v
+Firma válida              Firma no válida
+   |                           |
+   v                           v
+ACCEPT                        DENY
+   |                           |
+   v                           X
+Pod creado                Pod no creado
 ```
 
-No se utiliza CI/CD porque el objetivo del Proyecto es comprender y documentar el proceso manual.
-
 ---
 
-# 27. Referencias
+### 2. Prerrequisitos
 
-- Aqua Security. Trivy - Installation.  
-  https://www.trivy.dev/docs/latest/getting-started/installation/
+Antes de instalar Connaisseur se validó que el clúster Kubernetes estuviera operativo.
 
-- Aqua Security. Trivy - Container Image.  
-  https://trivy.dev/docs/dev/guide/target/container_image/
+#### 2.1 Validar nodos
 
-- Aqua Security. Trivy CLI - Image.  
-  https://trivy.dev/docs/dev/references/configuration/cli/trivy_image/
+```bash
+kubectl get nodes -o wide
+```
 
-- Aqua Security. Trivy Documentation.  
-  https://trivy.dev/
-
----
-
-## Estado
+Resultado esperado:
 
 ```text
-Fase 1 - Trivy: completada
-Fase 2 - Cosign: pendiente
-Fase 3 - Connaisseur: pendiente
+NAME       STATUS   ROLES           VERSION
+master01   Ready    control-plane   v1.36.4
+worker02   Ready    <none>          v1.36.4
+```
+
+#### 2.2 Validar Pods del sistema
+
+```bash
+kubectl get pods -A
+```
+
+Los componentes principales deben encontrarse en estado `Running`.
+
+#### 2.3 Validar red y DNS
+
+```bash
+kubectl run dns-test   -n supply-chain-demo   --image=busybox:1.36   --restart=Never   -- sleep 3600
+```
+
+```bash
+kubectl exec   -n supply-chain-demo   dns-test --   nslookup kubernetes.default.svc.cluster.local
+```
+
+Resultado esperado:
+
+```text
+Server:    10.96.0.10
+Address:   10.96.0.10:53
+
+Name:      kubernetes.default.svc.cluster.local
+Address:   10.96.0.1
+```
+
+---
+
+### 3. Instalación de Helm
+
+Verificar:
+
+```bash
+helm version
+```
+
+Versión utilizada:
+
+```text
+v3.22.0
+```
+
+Validar comunicación con Kubernetes:
+
+```bash
+helm list -A
+```
+
+---
+
+### 4. Agregar el repositorio de Connaisseur
+
+```bash
+helm repo add connaisseur   https://sse-secure-systems.github.io/connaisseur/charts
+```
+
+```bash
+helm repo update
+```
+
+```bash
+helm repo list
+```
+
+Resultado esperado:
+
+```text
+NAME          URL
+connaisseur   https://sse-secure-systems.github.io/connaisseur/charts
+```
+
+Buscar el chart:
+
+```bash
+helm search repo connaisseur
+```
+
+Versión utilizada:
+
+```text
+CHART VERSION: 2.13.0
+APP VERSION:   3.13.0
+```
+
+---
+
+### 5. Descargar el chart para revisión
+
+```bash
+mkdir -p /tmp/connaisseur-chart
+```
+
+```bash
+helm pull connaisseur/connaisseur   --version 2.13.0   --untar   --untardir /tmp/connaisseur-chart
+```
+
+Verificar:
+
+```bash
+ls -la /tmp/connaisseur-chart/connaisseur
+```
+
+Debe contener:
+
+```text
+Chart.yaml
+values.yaml
+templates/
+README.md
+```
+
+---
+
+### 6. Configuración de validación por namespace
+
+Archivo:
+
+```text
+kubernetes/connaisseur/values.yaml
+```
+
+Contenido:
+
+```yaml
+application:
+  features:
+    namespacedValidation:
+      mode: validate
+```
+
+Con esta configuración, Connaisseur solo valida namespaces que tengan la etiqueta:
+
+```text
+securesystemsengineering.connaisseur/webhook=validate
+```
+
+---
+
+### 7. Validar el chart antes de instalarlo
+
+#### 7.1 Helm lint
+
+```bash
+helm lint /tmp/connaisseur-chart/connaisseur   -f /home/adair/proyecto-trivy-cosign/kubernetes/connaisseur/values.yaml
+```
+
+Resultado obtenido:
+
+```text
+1 chart(s) linted, 0 chart(s) failed
+```
+
+#### 7.2 Renderizar manifiestos
+
+```bash
+helm template connaisseur   /tmp/connaisseur-chart/connaisseur   --namespace connaisseur   -f /home/adair/proyecto-trivy-cosign/kubernetes/connaisseur/values.yaml   > /tmp/connaisseur-rendered.yaml
+```
+
+> El archivo renderizado puede contener Secrets, certificados y material generado por el chart. No debe subirse al repositorio Git.
+
+Después de revisarlo:
+
+```bash
+rm -f /tmp/connaisseur-rendered.yaml
+```
+
+---
+
+### 8. Configurar kubeconfig para administración
+
+```bash
+export KUBECONFIG=/etc/kubernetes/admin.conf
+```
+
+Validar:
+
+```bash
+kubectl get nodes
+```
+
+---
+
+### 9. Instalación de Connaisseur
+
+```bash
+helm upgrade --install connaisseur   /tmp/connaisseur-chart/connaisseur   --namespace connaisseur   --create-namespace   --atomic   --timeout 10m   -f /home/adair/proyecto-trivy-cosign/kubernetes/connaisseur/values.yaml
+```
+
+Resultado esperado:
+
+```text
+STATUS: deployed
+```
+
+Validar:
+
+```bash
+helm list -n connaisseur
+```
+
+Resultado del laboratorio:
+
+```text
+NAME          NAMESPACE     STATUS     CHART                APP VERSION
+connaisseur   connaisseur   deployed   connaisseur-2.13.0   3.13.0
+```
+
+---
+
+### 10. Verificación de Pods
+
+```bash
+kubectl get pods -n connaisseur -o wide
+```
+
+Resultado observado:
+
+```text
+connaisseur-...               1/1 Running
+connaisseur-...               1/1 Running
+connaisseur-...               1/1 Running
+connaisseur-redis-...         1/1 Running
+```
+
+---
+
+### 11. Verificación de Services
+
+```bash
+kubectl get svc -n connaisseur
+```
+
+Servicios observados:
+
+```text
+connaisseur-svc
+connaisseur-redis-service
+```
+
+El servicio principal expone el webhook en `443/TCP`.
+
+---
+
+### 12. Admission Webhook
+
+La versión utilizada instala una:
+
+```text
+MutatingWebhookConfiguration
+```
+
+Verificar:
+
+```bash
+kubectl get mutatingwebhookconfigurations
+```
+
+Resultado:
+
+```text
+NAME                  WEBHOOKS
+connaisseur-webhook   1
+```
+
+Consultar configuración:
+
+```bash
+kubectl get mutatingwebhookconfiguration   connaisseur-webhook   -o yaml
+```
+
+Aspectos importantes:
+
+```yaml
+failurePolicy: Fail
+```
+
+El webhook apunta a:
+
+```text
+Service:   connaisseur-svc
+Namespace: connaisseur
+Path:      /mutate
+Port:      443
+```
+
+Intercepta operaciones `CREATE` y `UPDATE` sobre:
+
+```text
+Pods
+Deployments
+ReplicaSets
+DaemonSets
+StatefulSets
+Jobs
+CronJobs
+ReplicationControllers
+```
+
+---
+
+### 13. Namespace Selector
+
+La configuración generada contiene:
+
+```yaml
+namespaceSelector:
+  matchExpressions:
+    - key: securesystemsengineering.connaisseur/webhook
+      operator: In
+      values:
+        - validate
+```
+
+Esto limita el enforcement a namespaces etiquetados.
+
+---
+
+### 14. Habilitar validación en el namespace de laboratorio
+
+```bash
+kubectl label namespace supply-chain-demo   securesystemsengineering.connaisseur/webhook=validate   --overwrite
+```
+
+Validar:
+
+```bash
+kubectl get namespace supply-chain-demo --show-labels
+```
+
+Resultado:
+
+```text
+securesystemsengineering.connaisseur/webhook=validate
+```
+
+Estrategia:
+
+```text
+kube-system       -> no validado
+kube-flannel      -> no validado
+connaisseur       -> no validado
+
+supply-chain-demo -> validado
+```
+
+---
+
+### 15. Demo: imagen firmada aceptada
+
+Imagen utilizada:
+
+```text
+docker.io/securesystemsengineering/testimage:signed
+```
+
+Crear Pod:
+
+```bash
+kubectl run signed-demo   -n supply-chain-demo   --image=docker.io/securesystemsengineering/testimage:signed
+```
+
+Resultado:
+
+```text
+pod/signed-demo created
+```
+
+Validar:
+
+```bash
+kubectl get pod signed-demo   -n supply-chain-demo   -o wide
+```
+
+Resultado del laboratorio:
+
+```text
+NAME          READY   STATUS    NODE
+signed-demo   1/1     Running   worker02
+```
+
+---
+
+### 16. Trust Pinning
+
+Consultar la referencia final:
+
+```bash
+kubectl get pod signed-demo   -n supply-chain-demo   -o jsonpath='{.spec.containers[0].image}{"\n"}'
+```
+
+Resultado:
+
+```text
+index.docker.io/securesystemsengineering/testimage:signed@sha256:fe542477b92fb84c38eda9c824f6566d5c2536ef30af9c47152fa8a5fadb58dd
+```
+
+Aunque se solicitó un tag, el objeto quedó asociado a un digest SHA-256 concreto.
+
+---
+
+### 17. Demo: imagen sin firma válida rechazada
+
+Imagen utilizada:
+
+```text
+docker.io/securesystemsengineering/testimage:unsigned
+```
+
+Ejecutar:
+
+```bash
+kubectl run unsigned-demo   -n supply-chain-demo   --image=docker.io/securesystemsengineering/testimage:unsigned
+```
+
+Resultado obtenido:
+
+```text
+Error from server:
+admission webhook "connaisseur-svc.connaisseur.svc"
+denied the request:
+error during notaryv1 validation of image
+docker.io/securesystemsengineering/testimage:unsigned:
+validated targets don't contain reference:
+no tag 'unsigned' found in targets
+```
+
+Confirmar que el Pod no existe:
+
+```bash
+kubectl get pod unsigned-demo   -n supply-chain-demo
+```
+
+Resultado:
+
+```text
+Error from server (NotFound):
+pods "unsigned-demo" not found
+```
+
+---
+
+### 18. Logs de validación
+
+```bash
+kubectl logs   -n connaisseur   -l app.kubernetes.io/name=connaisseur   --tail=100
+```
+
+Para la imagen firmada se observó:
+
+```text
+successfully validated image docker.io/securesystemsengineering/testimage:signed
+using rule docker.io/securesystemsengineering/*:*
+and validator dockerhub
+```
+
+Para la imagen no firmada:
+
+```text
+error validating Pod unsigned-demo:
+error during notaryv1 validation
+```
+
+---
+
+### 19. Evidencias generadas
+
+Las evidencias se almacenan en:
+
+```text
+evidence/connaisseur/
+```
+
+Archivos:
+
+```text
+helm-release.txt
+connaisseur-pods.txt
+connaisseur-webhook.yaml
+namespace-validation.txt
+helm-values.txt
+signed-accepted.txt
+signed-image-reference.txt
+unsigned-rejected.txt
+validation-logs.txt
+```
+
+Ejemplos:
+
+```bash
+helm list -n connaisseur   > evidence/connaisseur/helm-release.txt
+```
+
+```bash
+kubectl get pods -n connaisseur -o wide   > evidence/connaisseur/connaisseur-pods.txt
+```
+
+```bash
+kubectl get mutatingwebhookconfiguration connaisseur-webhook -o yaml   > evidence/connaisseur/connaisseur-webhook.yaml
+```
+
+```bash
+kubectl get namespace supply-chain-demo --show-labels   > evidence/connaisseur/namespace-validation.txt
+```
+
+```bash
+kubectl get pod signed-demo   -n supply-chain-demo   -o wide   > evidence/connaisseur/signed-accepted.txt
+```
+
+```bash
+kubectl get pod signed-demo   -n supply-chain-demo   -o jsonpath='{.spec.containers[0].image}{"\n"}'   > evidence/connaisseur/signed-image-reference.txt
+```
+
+```bash
+kubectl run unsigned-demo   -n supply-chain-demo   --image=docker.io/securesystemsengineering/testimage:unsigned   > evidence/connaisseur/unsigned-rejected.txt 2>&1 || true
+```
+
+---
+
+### 20. Troubleshooting
+
+#### `repo connaisseur not found`
+
+El repositorio Helm fue agregado con otro usuario.
+
+```bash
+helm repo add connaisseur   https://sse-secure-systems.github.io/connaisseur/charts
+```
+
+```bash
+helm repo update
+```
+
+---
+
+#### `helm lint` busca `Chart.yaml` local
+
+`helm lint` debe ejecutarse contra un chart local:
+
+```bash
+helm pull connaisseur/connaisseur   --version 2.13.0   --untar   --untardir /tmp/connaisseur-chart
+```
+
+```bash
+helm lint /tmp/connaisseur-chart/connaisseur   -f /home/adair/proyecto-trivy-cosign/kubernetes/connaisseur/values.yaml
+```
+
+---
+
+#### kubectl intenta usar `localhost:8080`
+
+```bash
+export KUBECONFIG=/etc/kubernetes/admin.conf
+```
+
+```bash
+kubectl get nodes
+```
+
+---
+
+#### No aparece `ValidatingWebhookConfiguration`
+
+En esta versión del chart se utiliza:
+
+```text
+MutatingWebhookConfiguration
+```
+
+Consultar:
+
+```bash
+kubectl get mutatingwebhookconfigurations
+```
+
+---
+
+#### El Pod no es validado
+
+Verificar la etiqueta del namespace:
+
+```bash
+kubectl get namespace supply-chain-demo --show-labels
+```
+
+Debe contener:
+
+```text
+securesystemsengineering.connaisseur/webhook=validate
+```
+
+---
+
+### 21. Consideraciones de seguridad
+
+#### Failure Policy
+
+El webhook utiliza:
+
+```text
+failurePolicy: Fail
+```
+
+En un namespace protegido, si Connaisseur no puede completar la validación, Kubernetes bloquea la operación.
+
+Esto representa un comportamiento de tipo:
+
+```text
+fail closed
+```
+
+#### Validación limitada por namespace
+
+Durante el laboratorio no se habilitó enforcement global.
+
+El namespace protegido es:
+
+```text
+supply-chain-demo
+```
+
+#### No versionar secretos generados
+
+No subir a Git:
+
+```text
+/tmp/connaisseur-rendered.yaml
+```
+
+porque puede contener:
+
+- claves TLS;
+- certificados;
+- passwords generados;
+- Secrets de Kubernetes.
+
+---
+
+### 22. Alcance de esta demo
+
+Esta etapa utiliza la configuración de prueba incluida por Connaisseur y un validador basado en **Notary v1**.
+
+La evidencia demuestra:
+
+```text
+Connaisseur instalado
+        +
+Admission Control
+        +
+enforcement de confianza
+        +
+ACCEPT / DENY
+```
+
+Todavía no demuestra una firma propia realizada con Cosign.
+
+La siguiente fase será:
+
+```text
+Imagen propia
+    |
+    v
+Cosign
+    |
+    +-- cosign.key
+    |
+    v
+Registry OCI
+    |
+    v
+Connaisseur
+    |
+    +-- cosign.pub
+    |
+    +---------+---------+
+    |                   |
+    v                   v
+Firma válida       Firma inválida
+    |                   |
+    v                   v
+ ACCEPT               DENY
+```
+
+---
+
+### 23. Entregables cubiertos
+
+| Entregable | Estado |
+|---|---|
+| Helm chart o manifiestos de instalación | ✅ |
+| Connaisseur instalado en Kubernetes | ✅ |
+| Configuración de políticas de verificación | ✅ |
+| Validación limitada por namespace | ✅ |
+| Admission webhook registrado | ✅ |
+| Pod aceptado con firma válida | ✅ |
+| Pod rechazado sin firma válida | ✅ |
+| Evidencias almacenadas | ✅ |
+| Integración con clave Cosign propia | Pendiente |
+
+---
+
+### 24. Archivos versionables
+
+Se recomienda subir:
+
+```text
+kubernetes/
+└── connaisseur/
+    └── values.yaml
+
+evidence/
+└── connaisseur/
+    ├── helm-release.txt
+    ├── connaisseur-pods.txt
+    ├── connaisseur-webhook.yaml
+    ├── namespace-validation.txt
+    ├── helm-values.txt
+    ├── signed-accepted.txt
+    ├── signed-image-reference.txt
+    ├── unsigned-rejected.txt
+    └── validation-logs.txt
+```
+
+No subir llaves privadas, certificados privados, credenciales reales ni manifiestos renderizados con secretos.
+
+---
+
+### 25. Comandos rápidos de validación
+
+```bash
+helm list -n connaisseur
+```
+
+```bash
+kubectl get pods -n connaisseur
+```
+
+```bash
+kubectl get mutatingwebhookconfigurations
+```
+
+```bash
+kubectl get namespace supply-chain-demo --show-labels
+```
+
+```bash
+kubectl get pod signed-demo -n supply-chain-demo
+```
+
+```bash
+kubectl get pod unsigned-demo -n supply-chain-demo
+```
+
+---
+
+### 26. Resultado final de esta fase
+
+```text
+Solicitud de despliegue
+          |
+          v
+Kubernetes API Server
+          |
+          v
+Connaisseur
+          |
+      valida imagen
+          |
+     +----+----+
+     |         |
+     v         v
+  válida     inválida
+     |         |
+     v         v
+  ACCEPT      DENY
+     |         |
+     v         X
+ Pod creado  Sin Pod
+```
+
+La imagen válida quedó además fijada mediante un digest SHA-256, demostrando *trust pinning*.
+
+---
+
+
+---
+
+## Fase 3 — Cosign: firma y verificación criptográfica
+
+Esta fase todavía está pendiente.
+
+Los objetivos serán:
+
+- Instalar Cosign.
+- Generar un par de claves pública/privada.
+- Proteger la llave privada y documentar su custodia.
+- Firmar manualmente al menos tres imágenes.
+- Verificar manualmente las firmas.
+- Publicar las imágenes en un registry OCI accesible por Kubernetes.
+- Configurar Connaisseur para confiar en la clave pública propia.
+- Demostrar:
+  - imagen propia firmada → `ACCEPT`;
+  - imagen propia sin firma válida → `DENY`.
+
+Flujo previsto:
+
+```text
+Imagen propia
+    |
+    v
+Cosign
+    |
+    +-- cosign.key   (privada, NO Git)
+    |
+    v
+Registry OCI
+    |
+    v
+Connaisseur
+    |
+    +-- cosign.pub
+    |
+    +---------+---------+
+    |                   |
+    v                   v
+Firma válida       Firma inválida
+    |                   |
+    v                   v
+ ACCEPT               DENY
+```
+
+---
+
+## Relación global con ISO/IEC 27001:2022
+
+### A.8.8 — Gestión de vulnerabilidades técnicas
+
+Cubierto principalmente por Trivy mediante:
+
+- reportes de vulnerabilidades;
+- clasificación por severidad;
+- evaluación de exposición;
+- decisiones de tratamiento;
+- reescaneo.
+
+### A.8.29 — Pruebas de seguridad en desarrollo y aceptación
+
+Cubierto mediante:
+
+- criterio de aceptación de vulnerabilidades;
+- escaneo previo al despliegue;
+- admission control con Connaisseur;
+- evidencia de una imagen aceptada;
+- evidencia de una imagen rechazada.
+
+### A.5.9 — Inventario de información y activos asociados
+
+Cubierto mediante:
+
+- SBOM CycloneDX de las imágenes analizadas.
+
+### A.8.12 — Prevención de fuga de datos
+
+Cubierto mediante:
+
+- secret scanning;
+- imagen deliberadamente vulnerable;
+- demostración de persistencia de secretos en capas OCI.
+
+### A.8.24 — Uso de criptografía
+
+**Pendiente de cierre con Cosign.**
+
+La fase Cosign documentará generación, custodia, firma, verificación y rotación del material criptográfico.
+
+---
+
+## Evidencias del proyecto
+
+### Trivy
+
+```text
+reports/json/
+reports/html/
+reports/sbom/
+reports/secrets/
+evidence/trivy/
+```
+
+### Connaisseur
+
+```text
+evidence/connaisseur/
+├── helm-release.txt
+├── connaisseur-pods.txt
+├── connaisseur-webhook.yaml
+├── namespace-validation.txt
+├── helm-values.txt
+├── signed-accepted.txt
+├── signed-image-reference.txt
+├── unsigned-rejected.txt
+└── validation-logs.txt
+```
+
+### Cosign
+
+Pendiente. Se agregará evidencia de:
+
+```text
+cosign generate-key-pair
+cosign sign
+cosign verify
+```
+
+sin versionar la llave privada.
+
+---
+
+## Consideraciones de seguridad del repositorio
+
+Antes de cada `git push`:
+
+```bash
+git status
+git diff --cached
+```
+
+Buscar posibles materiales sensibles:
+
+```bash
+git ls-files | grep -Ei '\.(key|pem|p12|pfx)$'
+```
+
+Ejemplo de `.gitignore`:
+
+```gitignore
+keys/*.key
+cosign.key
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+.trivycache/
+.cache/
+```
+
+---
+
+## Referencias
+
+### Trivy
+
+- Aqua Security — Trivy Documentation  
+  https://trivy.dev/
+
+- Aqua Security — Trivy Installation  
+  https://www.trivy.dev/docs/latest/getting-started/installation/
+
+- Aqua Security — Container Image Scanning  
+  https://trivy.dev/docs/dev/guide/target/container_image/
+
+### Connaisseur
+
+- Connaisseur Documentation  
+  https://sse-secure-systems.github.io/connaisseur/latest/
+
+- Connaisseur GitHub Repository  
+  https://github.com/sse-secure-systems/connaisseur
+
+### Kubernetes y Helm
+
+- Helm Documentation  
+  https://helm.sh/docs/
+
+- Kubernetes Admission Control  
+  https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/
+
+---
+
+## Estado final actual
+
+```text
+Trivy                          ✅ COMPLETADO
+Connaisseur base               ✅ COMPLETADO
+Cosign                         ⏳ PENDIENTE
+Integración Cosign-Connaisseur ⏳ PENDIENTE
 ```
