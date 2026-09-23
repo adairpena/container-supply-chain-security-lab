@@ -1,0 +1,6 @@
+---
+fw_ports:
+  - 10250/tcp         # kubelet
+  - 10256/tcp         # kube-proxy health
+  - 30000-32767/tcp   # NodePort
+  - 8472/udp          # VXLAN de Flannel

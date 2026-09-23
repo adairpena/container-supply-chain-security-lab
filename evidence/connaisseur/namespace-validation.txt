@@ -1,0 +1,2 @@
+NAME                STATUS   AGE     LABELS
+supply-chain-demo   Active   3h13m   kubernetes.io/metadata.name=supply-chain-demo,securesystemsengineering.connaisseur/webhook=validate

@@ -1,0 +1,4 @@
+application:
+  features:
+    namespacedValidation:
+      mode: validate

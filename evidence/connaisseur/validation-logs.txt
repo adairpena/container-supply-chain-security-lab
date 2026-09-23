@@ -1,0 +1,39 @@
+{
+  "level": "info",
+  "msg": "Starting server at 127.0.0.1:5000...",
+  "time": "2026-09-23T19:21:46Z"
+}
+{
+  "level": "error",
+  "msg": "error validating Pod unsigned-demo: error during notaryv1 validation of image docker.io/securesystemsengineering/testimage:unsigned: validated targets don't contain reference: no tag 'unsigned' found in targets",
+  "time": "2026-09-23T20:02:48Z"
+}
+{
+  "level": "error",
+  "msg": "error validating Pod unsigned-demo: error during notaryv1 validation of image docker.io/securesystemsengineering/testimage:unsigned: validated targets don't contain reference: no tag 'unsigned' found in targets",
+  "time": "2026-09-23T20:15:10Z"
+}
+{
+  "level": "info",
+  "msg": "Starting server at 127.0.0.1:5000...",
+  "time": "2026-09-23T19:21:45Z"
+}
+1:C 23 Sep 2026 19:21:37.580 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+1:C 23 Sep 2026 19:21:37.581 * Redis version=7.4.5, bits=64, commit=00000000, modified=0, pid=1, just started
+1:C 23 Sep 2026 19:21:37.581 * Configuration loaded
+1:M 23 Sep 2026 19:21:37.581 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+1:M 23 Sep 2026 19:21:37.581 * monotonic clock: POSIX clock_gettime
+1:M 23 Sep 2026 19:21:37.584 * Running mode=standalone, port=6380.
+1:M 23 Sep 2026 19:21:37.589 * Server initialized
+1:M 23 Sep 2026 19:21:37.589 * Ready to accept connections tcp
+1:M 23 Sep 2026 19:21:37.589 * Ready to accept connections tls
+{
+  "level": "info",
+  "msg": "Starting server at 127.0.0.1:5000...",
+  "time": "2026-09-23T19:21:44Z"
+}
+{
+  "level": "info",
+  "msg": "successfully validated image docker.io/securesystemsengineering/testimage:signed using rule docker.io/securesystemsengineering/*:* and validator dockerhub. Result is index.docker.io/securesystemsengineering/testimage:signed@sha256:fe542477b92fb84c38eda9c824f6566d5c2536ef30af9c47152fa8a5fadb58dd.",
+  "time": "2026-09-23T19:30:53Z"
+}

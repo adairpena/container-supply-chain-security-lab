@@ -1,0 +1,5 @@
+NAME                                 READY   STATUS    RESTARTS   AGE   IP           NODE       NOMINATED NODE   READINESS GATES
+connaisseur-67cc557484-mgp7p         1/1     Running   0          52m   10.244.1.7   worker02   <none>           <none>
+connaisseur-67cc557484-njnh6         1/1     Running   0          52m   10.244.1.8   worker02   <none>           <none>
+connaisseur-67cc557484-s5sqp         1/1     Running   0          52m   10.244.1.9   worker02   <none>           <none>
+connaisseur-redis-575bdf5786-b6gbn   1/1     Running   0          52m   10.244.1.6   worker02   <none>           <none>

@@ -1,0 +1,1 @@
+Error from server: admission webhook "connaisseur-svc.connaisseur.svc" denied the request: error during notaryv1 validation of image docker.io/securesystemsengineering/testimage:unsigned: validated targets don't contain reference: no tag 'unsigned' found in targets

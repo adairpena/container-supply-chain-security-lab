@@ -1,0 +1,156 @@
+---
+- name: Inicializar el control plane
+  hosts: masters
+  become: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+  tasks:
+
+    # ============================================================
+    # 1. Validar variables necesarias
+    # ============================================================
+
+    - name: Validar configuración del control plane
+      ansible.builtin.assert:
+        that:
+          - control_plane_endpoint is defined
+          - pod_cidr is defined
+          - service_cidr is defined
+          - flannel_manifest is defined
+          - flannel_iface is defined
+        fail_msg: >
+          Faltan variables requeridas para inicializar Kubernetes
+          o configurar Flannel.
+
+    # ============================================================
+    # 2. Inicializar Kubernetes Control Plane
+    # ============================================================
+
+    - name: Inicializar Kubernetes con kubeadm
+      ansible.builtin.command:
+        cmd: >
+          kubeadm init
+          --control-plane-endpoint={{ control_plane_endpoint }}
+          --apiserver-advertise-address={{ ansible_host }}
+          --pod-network-cidr={{ pod_cidr }}
+          --service-cidr={{ service_cidr }}
+      args:
+        creates: /etc/kubernetes/admin.conf
+
+    # ============================================================
+    # 3. Configurar kubeconfig para el usuario Ansible
+    # ============================================================
+
+    - name: Crear carpeta .kube del usuario
+      ansible.builtin.file:
+        path: "/home/{{ ansible_user }}/.kube"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0700"
+
+    - name: Copiar kubeconfig al usuario
+      ansible.builtin.copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "/home/{{ ansible_user }}/.kube/config"
+        remote_src: true
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0600"
+
+    # ============================================================
+    # 4. Instalar Flannel
+    # ============================================================
+
+    - name: Instalar red de Pods con Flannel
+      ansible.builtin.command:
+        cmd: "kubectl apply -f {{ flannel_manifest }}"
+      register: flannel_apply
+      changed_when: >
+        'created' in flannel_apply.stdout or
+        'configured' in flannel_apply.stdout
+
+    # ============================================================
+    # 5. Forzar interfaz correcta de Flannel
+    # ============================================================
+
+    - name: Configurar interfaz correcta para Flannel
+      ansible.builtin.command:
+        cmd: >
+          kubectl
+          -n kube-flannel
+          patch daemonset kube-flannel-ds
+          --type=strategic
+          -p
+          '{"spec":{"template":{"spec":{"containers":[{"name":"kube-flannel","args":["--ip-masq","--kube-subnet-mgr","--iface={{ flannel_iface }}"]}]}}}}'
+      register: flannel_patch
+      changed_when: >
+        'patched' in flannel_patch.stdout and
+        '(no change)' not in flannel_patch.stdout
+
+    # ============================================================
+    # 6. Esperar a que Flannel termine su rollout
+    # ============================================================
+
+    - name: Esperar despliegue de Flannel
+      ansible.builtin.command:
+        cmd: >
+          kubectl
+          rollout status
+          daemonset/kube-flannel-ds
+          -n kube-flannel
+          --timeout=180s
+      changed_when: false
+
+    # ============================================================
+    # 7. Esperar a que el control plane quede Ready
+    # ============================================================
+
+    - name: Esperar a que el nodo control plane esté Ready
+      ansible.builtin.command:
+        cmd: >
+          kubectl
+          wait
+          --for=condition=Ready
+          node/{{ inventory_hostname }}
+          --timeout=300s
+      changed_when: false
+
+    # ============================================================
+    # 8. Validaciones
+    # ============================================================
+
+    - name: Obtener nodos Kubernetes
+      ansible.builtin.command:
+        cmd: kubectl get nodes -o wide
+      register: kubernetes_nodes
+      changed_when: false
+
+    - name: Mostrar nodos Kubernetes
+      ansible.builtin.debug:
+        var: kubernetes_nodes.stdout_lines
+
+    - name: Obtener Pods de Flannel
+      ansible.builtin.command:
+        cmd: kubectl get pods -n kube-flannel -o wide
+      register: flannel_pods
+      changed_when: false
+
+    - name: Mostrar Pods de Flannel
+      ansible.builtin.debug:
+        var: flannel_pods.stdout_lines
+
+    - name: Verificar argumentos configurados en Flannel
+      ansible.builtin.command:
+        cmd: >
+          kubectl
+          -n kube-flannel
+          get daemonset kube-flannel-ds
+          -o jsonpath={.spec.template.spec.containers[0].args}
+      register: flannel_args
+      changed_when: false
+
+    - name: Mostrar argumentos de Flannel
+      ansible.builtin.debug:
+        msg: "Argumentos Flannel: {{ flannel_args.stdout }}"

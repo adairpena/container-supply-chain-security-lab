@@ -1,0 +1,10 @@
+---
+ansible_user: ansible
+
+k8s_minor: "v1.36"
+control_plane_endpoint: master01
+pod_cidr: "10.244.0.0/16" 
+service_cidr: "10.96.0.0/12"
+flannel_iface: "enp0s8"
+
+flannel_manifest: "https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"

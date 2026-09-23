@@ -1,0 +1,206 @@
+---
+- name: Preparar nodos Rocky Linux 9
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    # ============================================================
+    # 1. Dependencias necesarias para Ansible / Kubernetes
+    # ============================================================
+
+    - name: Instalar dependencias base
+      ansible.builtin.dnf:
+        name:
+          - python3-libselinux
+          - python3-firewall
+          - firewalld
+          - curl
+          - wget
+          - tar
+          - iproute
+          - iproute-tc
+          - conntrack-tools
+          - socat
+        state: present
+
+    - name: Habilitar e iniciar firewalld
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
+
+    # ============================================================
+    # 2. Configuración de hostname
+    # ============================================================
+
+    - name: Definir hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    # ============================================================
+    # 3. Configuración de /etc/hosts
+    # ============================================================
+
+    - name: Registrar nodos en /etc/hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ hostvars[item].ansible_host }} {{ item }}"
+        state: present
+        create: true
+      loop: "{{ groups['all'] }}"
+
+    # ============================================================
+    # 4. Desactivar swap
+    # ============================================================
+
+    - name: Apagar swap
+      ansible.builtin.command:
+        cmd: swapoff -a
+      when: ansible_swaptotal_mb > 0
+      changed_when: true
+
+    - name: Comentar swap en /etc/fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\s+swap\s+.*)$'
+        replace: '# \1'
+
+    # ============================================================
+    # 5. SELinux
+    # ============================================================
+
+    - name: Configurar SELinux en permissive
+      ansible.posix.selinux:
+        policy: targeted
+        state: permissive
+
+    # ============================================================
+    # 6. Módulos necesarios para Kubernetes
+    # ============================================================
+
+    - name: Configurar módulos del kernel persistentes
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: |
+          overlay
+          br_netfilter
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Cargar módulos del kernel
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - overlay
+        - br_netfilter
+
+    # ============================================================
+    # 7. Parámetros sysctl para Kubernetes
+    # ============================================================
+
+    - name: Configurar parámetros sysctl
+      ansible.posix.sysctl:
+        name: "{{ item }}"
+        value: "1"
+        sysctl_file: /etc/sysctl.d/k8s.conf
+        state: present
+        reload: true
+      loop:
+        - net.bridge.bridge-nf-call-iptables
+        - net.bridge.bridge-nf-call-ip6tables
+        - net.ipv4.ip_forward
+
+    # ============================================================
+    # 8. Firewall
+    # ============================================================
+
+    - name: Abrir puertos del rol
+      ansible.posix.firewalld:
+        port: "{{ item }}"
+        permanent: true
+        immediate: true
+        state: enabled
+      loop: "{{ fw_ports }}"
+
+    - name: Confiar en red de Pods
+      ansible.posix.firewalld:
+        source: "{{ pod_cidr }}"
+        zone: trusted
+        permanent: true
+        immediate: true
+        state: enabled
+
+    - name: Confiar en red de Services
+      ansible.posix.firewalld:
+        source: "{{ service_cidr }}"
+        zone: trusted
+        permanent: true
+        immediate: true
+        state: enabled
+
+    - name: Habilitar masquerade
+      ansible.posix.firewalld:
+        masquerade: true
+        permanent: true
+        immediate: true
+        state: enabled
+        zone: public
+
+    # ============================================================
+    # 9. Validaciones
+    # ============================================================
+
+    - name: Verificar estado de SELinux
+      ansible.builtin.command:
+        cmd: getenforce
+      register: selinux_status
+      changed_when: false
+
+    - name: Mostrar estado de SELinux
+      ansible.builtin.debug:
+        msg: "SELinux: {{ selinux_status.stdout }}"
+
+    - name: Verificar swap
+      ansible.builtin.command:
+        cmd: swapon --show
+      register: swap_status
+      changed_when: false
+
+    - name: Mostrar estado de swap
+      ansible.builtin.debug:
+        msg: >-
+          Swap:
+          {{ 'deshabilitado' if swap_status.stdout | length == 0
+          else swap_status.stdout }}
+
+    - name: Verificar módulos cargados
+      ansible.builtin.shell:
+        cmd: |
+          set -o pipefail
+          lsmod | grep -E 'overlay|br_netfilter'
+        executable: /bin/bash
+      register: modules_status
+      changed_when: false
+
+    - name: Mostrar módulos cargados
+      ansible.builtin.debug:
+        var: modules_status.stdout_lines
+
+    - name: Verificar parámetros sysctl
+      ansible.builtin.command:
+        cmd: sysctl {{ item }}
+      loop:
+        - net.bridge.bridge-nf-call-iptables
+        - net.bridge.bridge-nf-call-ip6tables
+        - net.ipv4.ip_forward
+      register: sysctl_status
+      changed_when: false
+
+    - name: Mostrar parámetros sysctl
+      ansible.builtin.debug:
+        msg: "{{ item.stdout }}"
+      loop: "{{ sysctl_status.results }}"
