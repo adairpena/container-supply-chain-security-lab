@@ -18,8 +18,8 @@ El proyecto se desarrolla de forma **manual, reproducible y documentada**, sin i
 |---|---|---|
 | Trivy | ✅ Completada | JSON, HTML, SBOM, secret scanning y análisis de capas |
 | Connaisseur base | ✅ Completada | Helm, webhook, namespace protegido, ACCEPT/DENY y trust pinning |
-| Cosign | ✅ Completadae | Par de claves, firma y verificación manual |
-| Integración Cosign + Connaisseur | ⏳ Pendiente | Validación con `cosign.pub` y demos con imágenes propias |
+| Cosign | ✅ Completada | Par de claves, firma y verificación manual |
+| Integración Cosign + Connaisseur | ✅ Completada | Validación con `cosign.pub` y demos con imágenes propias |
 
 ---
 
@@ -2301,5 +2301,5 @@ cosign.key
 Trivy                          ✅ COMPLETADO
 Connaisseur base               ✅ COMPLETADO
 Cosign                         ✅ COMPLETADO
-Integración Cosign-Connaisseur ⏳ PENDIENTE
+Integración Cosign-Connaisseur ✅ COMPLETADO
 ```
