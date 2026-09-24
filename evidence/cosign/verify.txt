@@ -1,0 +1,9 @@
+$cosign verify --key keys/cosign.pub localhost:5000/nginx:local --allow-insecure-registry
+
+Verification for localhost:5000/nginx:local --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The signatures were verified against the specified public key
+
+[{"critical":{"identity":{"docker-reference":"localhost:5000/nginx:local"},"image":{"docker-manifest-digest":"sha256:b08e790f45850744b630f4c50971ad29e64cead862757324797a1f9f2507f3dc"},"type":"https://sigstore.dev/cosign/sign/v1"},"optional":{}},{"critical":{"identity":{"docker-reference":"localhost:5000/nginx:local"},"image":{"docker-manifest-digest":"sha256:b08e790f45850744b630f4c50971ad29e64cead862757324797a1f9f2507f3dc"},"type":"https://sigstore.dev/cosign/sign/v1"},"optional":{}}]

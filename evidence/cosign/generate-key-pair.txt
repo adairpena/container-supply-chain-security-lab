@@ -1,0 +1,9 @@
+$cosign generate-key-pair
+Enter password for private key:
+Enter password for private key again:
+Private key written to cosign.key
+Public key written to cosign.pub
+$ls -l
+total 1
+-rwxrwxrwx 1 quintart quintart 653 Sep 23 19:27 cosign.key
+-rwxrwxrwx 1 quintart quintart 178 Sep 23 19:27 cosign.pub

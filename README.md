@@ -2080,27 +2080,95 @@ La imagen válida quedó además fijada mediante un digest SHA-256, demostrando 
 
 ---
 
+## Fase 4. Integración de Cosign y Connaisseur
+En esta fase se integra la llave pública generada por Cosign (`cosign.pub`) dentro de la configuración de Connaisseur para que el clúster valide nuestras propias firmas antes de permitir el despliegue.
 
----
+### 1. Configurar la llave pública en Connaisseur
+
+Se debe modificar el archivo `kubernetes/connaisseur/values.yaml` para agregar un nuevo validador de tipo `cosign` y establecer la política de confianza para nuestro registro local.
+
+Se edita el archivo `values.yaml` para incluir:
+
+```yaml
+application:
+  features:
+    namespacedValidation:
+      mode: validate
+  validators:
+    - name: validador-cosign-propio
+      type: cosign
+      trustRoots:
+        - name: default-key
+          key: |
+            -----BEGIN PUBLIC KEY-----
+            MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE9ZNEvRihJUcn6mNYZjbUbMW6Myzz
+            38mOWRuXyyJmtkXeYGZT34+DMoKfQk2uTXq+rExvLJsS3W3BZ8KTT6598g==
+            -----END PUBLIC KEY-----
+  policy:
+    - pattern: "localhost:5000/*:*"
+      validator: validador-cosign-propio
+      with:
+        trustRoot: default-key
+```
+
+### 2. Actualizar la instalación de Connaisseur
+Aplicando cambios en el clúster mediante Helm:
+```bash
+helm upgrade connaisseur /tmp/connaisseur-chart/connaisseur \
+  --namespace connaisseur \
+  -f /home/adair/proyecto-trivy-cosign/kubernetes/connaisseur/values.yaml
+```
+
+Se valida que los pods de Connaisseur se reinicien y tomen la nueva configuración:
+```bash
+kubectl rollout status deployment/connaisseur -n connaisseur
+```
 
 
+### 3. Despliegue de imágenes
+Para demostrar la integración, utilizamos el namespace supply-chain-demo (previamente etiquetado para validación).
+
+Prueba 1: Intento de despliegue de imagen sin firma (DEBE FALLAR)
+Utilizaremos una imagen que no ha sido firmada por la llave correcta (nginx>latest se firmo con keys_false).
+
+```bash
+kubectl run pod-sin-firma -n supply-chain-demo --image=localhost:5000/nginx:latest
+```
+
+Resultado esperado: Connaisseur intercepta la petición y el API Server devuelve un error indicando que no se encontraron firmas válidas (DENY).
+
+
+Prueba 2: Despliegue de imagen firmada (DEBE FUNCIONAR)
+Utilizaremos una de las imágenes que firmamos previamente en la Fase 2.
+```bash
+kubectl run pod-firmado -n supply-chain-demo --image=localhost:5000/nginx:local
+```
+
+Resultado esperado: El pod se crea exitosamente (ACCEPT). PueSe puede verificar con:
+```bash
+kubectl get pods -n supply-chain-demo
+```
 
 ## Relación global con ISO/IEC 27001:2022
 
+Este proyecto se ejecuta en la etapa previa al despliegue, actuando como una compuerta de seguridad que decide si un artefacto es apto y comprueba su origen. A continuación se detallan los controles del bloque tecnológico del Anexo A cubiertos:
+
 ### A.8.8 — Gestión de vulnerabilidades técnicas
-
 Cubierto principalmente por Trivy mediante:
-
 - reportes de vulnerabilidades;
 - clasificación por severidad;
 - evaluación de exposición;
 - decisiones de tratamiento;
 - reescaneo.
 
+### A.8.24 — Uso de criptografía
+* **Exigencia de la norma:** Reglas para el uso de criptografía, incluyendo la gestión del ciclo de vida de las llaves.
+* **Cobertura en el proyecto:** Implementación de Cosign para la generación del par de llaves, firma criptográfica de las imágenes y verificación mediante Connaisseur.
+* **Evidencia:** Procedimiento escrito en este documento sobre la generación y uso de llaves, y capturas de salida de `cosign verify` sobre las 3 imágenes.
+* ⚠️ **Brecha residual declarada:** La llave privada (`cosign.key`) se encuentra almacenada en texto plano en el disco local del alumno/operador. Esto no constituye una gestión segura del ciclo de vida (custodia). *Mitigación propuesta:* En un entorno productivo, la llave privada debe migrarse a un sistema KMS (Key Management Service).
+
 ### A.8.29 — Pruebas de seguridad en desarrollo y aceptación
-
 Cubierto mediante:
-
 - criterio de aceptación de vulnerabilidades;
 - escaneo previo al despliegue;
 - admission control con Connaisseur;
@@ -2108,24 +2176,13 @@ Cubierto mediante:
 - evidencia de una imagen rechazada.
 
 ### A.5.9 — Inventario de información y activos asociados
-
 Cubierto mediante:
-
 - SBOM CycloneDX de las imágenes analizadas.
 
 ### A.8.12 — Prevención de fuga de datos
-
-Cubierto mediante:
-
-- secret scanning;
-- imagen deliberadamente vulnerable;
-- demostración de persistencia de secretos en capas OCI.
-
-### A.8.24 — Uso de criptografía
-
-**Pendiente de cierre con Cosign.**
-
-La fase Cosign documentará generación, custodia, firma, verificación y rotación del material criptográfico.
+* **Exigencia de la norma:** Aplicar medidas para detectar y evitar la divulgación no autorizada de información.
+* **Cobertura en el proyecto:** Escaneo de secretos en el código e imágenes mediante Trivy. Se analizan las distintas capas del contenedor para demostrar que eliminar un secreto en una capa superior (mediante un `rm`) no lo borra del historial de la imagen.
+* **Evidencia:** Archivo JSON con el hallazgo del secreto plantado a propósito en la imagen `trivy-secret-demo:v1` y captura de `podman history` mostrando la capa comprometida.
 
 ---
 
@@ -2158,15 +2215,12 @@ evidence/connaisseur/
 
 ### Cosign
 
-Pendiente. Se agregará evidencia de:
-
 ```text
-cosign generate-key-pair
-cosign sign
-cosign verify
+evidence/cosign
+├── generate-key-pair.txt
+├── sign.txt
+├── verify.txt
 ```
-
-sin versionar la llave privada.
 
 ---
 
