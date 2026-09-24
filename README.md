@@ -18,7 +18,7 @@ El proyecto se desarrolla de forma **manual, reproducible y documentada**, sin i
 |---|---|---|
 | Trivy | ✅ Completada | JSON, HTML, SBOM, secret scanning y análisis de capas |
 | Connaisseur base | ✅ Completada | Helm, webhook, namespace protegido, ACCEPT/DENY y trust pinning |
-| Cosign | ⏳ Pendiente | Par de claves, firma y verificación manual |
+| Cosign | ✅ Completadae | Par de claves, firma y verificación manual |
 | Integración Cosign + Connaisseur | ⏳ Pendiente | Validación con `cosign.pub` y demos con imágenes propias |
 
 ---
@@ -1082,7 +1082,144 @@ Evidencia:
 
 ---
 
-## Fase 2 — Connaisseur: admission control en Kubernetes
+## Fase 2 — Cosign: Firma y verificación criptográfica de imagenes
+En esta sección se describe la instalacion y uso básico de la herramienta para asegurar la integridad de una imagen para contenedores.
+
+### 1. Objetivo
+- Instalar Cosign.
+- Generar un par de claves pública/privada.
+- Proteger la llave privada y documentar su custodia.
+- Firmar manualmente al menos tres imágenes.
+- Verificar manualmente las firmas.
+- Publicar las imágenes en un registry OCI accesible por Kubernetes.
+- Configurar Connaisseur para confiar en la clave pública propia.
+- Demostrar:
+  - imagen propia firmada → `ACCEPT`;
+  - imagen propia sin firma válida → `DENY`.
+
+Flujo previsto:
+
+```text
+Imagen propia
+    |
+    v
+Cosign
+    |
+    +-- cosign.key   (privada, NO Git)
+    |
+    v
+Registry OCI
+    |
+    v
+Connaisseur
+    |
+    +-- cosign.pub (public key)
+    |
+    +---------+---------+
+    |                   |
+    v                   v
+Firma válida       Firma inválida
+    |                   |
+    v                   v
+ ACCEPT               DENY
+```
+
+## 2. Instalación de Cosign
+
+Descarga e instala el RPM oficial desde el repositorio de Sigstore.
+
+```bash
+curl -O -L "https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64"
+sudo mv cosign-linux-amd64 /usr/local/bin/cosign
+sudo chmod +x /usr/local/bin/cosign
+```
+
+Se puede verificar instalación mediante:
+```bash
+cosign version
+```
+
+## 3. Generación de llaves
+Se crea carpeta keys:
+```bash
+mkdir -p keys
+cd keys
+cosign generate-key-pair
+cd ..     #Regresamos un nivel arriba
+```
+Esto genera cosign.pub y cosign.key
+
+## 4. Preparando un Registry local para subir imagenes localmente
+Se levanta un registro local en el puerto 5000 para poder subir y firmar las imágenes sin crear cuentas.
+```bash
+podman run -d -p 5000:5000 --name local-registry docker.io/library/registry:2
+```
+
+Se etiquetan las imagenes
+```bash
+podman tag nginx:latest localhost:5000/nginx:local
+podman tag python:3.4-alpine localhost:5000/python:local
+podman tag debian:11 localhost:5000/debian:local
+```
+
+Push a las imagenes omitiendo tls
+```bash
+podman push --tls-verify=false localhost:5000/nginx:local
+podman push --tls-verify=false localhost:5000/python:local
+podman push --tls-verify=false localhost:5000/debian:local
+```
+
+## 5. Firmado local de imagenes
+Firma las 3 imágenes utilizando la llave privada. Como usamos un registro local sin HTTPS, necesitamos la bandera --allow-insecure-registry.
+```bash
+cosign sign --key keys/cosign.key localhost:5000/nginx:local --allow-insecure-registry -y
+cosign sign --key keys/cosign.key localhost:5000/python:local --allow-insecure-registry -y
+cosign sign --key keys/cosign.key localhost:5000/debian:local --allow-insecure-registry -y
+```
+
+## 6. Verificacion de firmas
+```bash
+cosign verify --key keys/cosign.pub localhost:5000/nginx:local --allow-insecure-registry
+cosign verify --key keys/cosign.pub localhost:5000/python:local --allow-insecure-registry
+cosign verify --key keys/cosign.pub localhost:5000/debian:local --allow-insecure-registry
+```
+Interpretación de la salida:
+Si la verificación es exitosa, Cosign retornará un objeto JSON indicando que la firma es válida y los detalles del digest de la imagen que fue firmada. Si la imagen es alterada o carece de firma, el comando fallará y devolverá un código de error, bloqueando así un posible despliegue inseguro.
+
+Salida exitosa:
+```bash
+Verification for localhost:5000/debian:local --
+The following checks were performed on each of these signatures:
+  - The cosign claims were validated
+  - Existence of the claims in the transparency log was verified offline
+  - The signatures were verified against the specified public key
+
+[{"critical":{"identity":{"docker-reference":"localhost:5000/debian:local"},"image":{"docker-manifest-digest":"sha256:8ebee6093968f540c7f36dbf7a1dc13393e66f08d5452233e1bac0382e170bcc"},"type":"https://sigstore.dev/cosign/sign/v1"},"optional":{}}]
+```
+
+Salida erronea, si se sube una imagen sin firmar:
+```bash
+Error: no signatures found
+error during command execution: no signatures found
+```
+
+Salida erronea donde si esta firmada pero no con la llave correcta:
+```bash
+mkdir -p keys_false && cd keys_false
+cosign generate-key-pair
+Enter password for private key:
+Enter password for private key again:
+Private key written to cosign.key
+Public key written to cosign.pub
+cd ..
+cosign verify --key keys_false/cosign.pub localhost:5000/nginx:local --allow-insecure-registry
+Error: no matching attestations: failed to verify log inclusion: transparency log certificate does not match
+failed to verify log inclusion: transparency log certificate does not match
+error during command execution: no matching attestations: failed to verify log inclusion: transparency log certificate does not match
+failed to verify log inclusion: transparency log certificate does not match
+```
+
+## Fase 3 — Connaisseur: admission control en Kubernetes
 
 Este documento describe la instalación, configuración y validación de **Connaisseur** como admission controller para verificar la confianza de imágenes de contenedor antes de permitir su despliegue en Kubernetes.
 
@@ -1946,51 +2083,7 @@ La imagen válida quedó además fijada mediante un digest SHA-256, demostrando 
 
 ---
 
-## Fase 3 — Cosign: firma y verificación criptográfica
 
-Esta fase todavía está pendiente.
-
-Los objetivos serán:
-
-- Instalar Cosign.
-- Generar un par de claves pública/privada.
-- Proteger la llave privada y documentar su custodia.
-- Firmar manualmente al menos tres imágenes.
-- Verificar manualmente las firmas.
-- Publicar las imágenes en un registry OCI accesible por Kubernetes.
-- Configurar Connaisseur para confiar en la clave pública propia.
-- Demostrar:
-  - imagen propia firmada → `ACCEPT`;
-  - imagen propia sin firma válida → `DENY`.
-
-Flujo previsto:
-
-```text
-Imagen propia
-    |
-    v
-Cosign
-    |
-    +-- cosign.key   (privada, NO Git)
-    |
-    v
-Registry OCI
-    |
-    v
-Connaisseur
-    |
-    +-- cosign.pub
-    |
-    +---------+---------+
-    |                   |
-    v                   v
-Firma válida       Firma inválida
-    |                   |
-    v                   v
- ACCEPT               DENY
-```
-
----
 
 ## Relación global con ISO/IEC 27001:2022
 
@@ -2121,6 +2214,15 @@ cosign.key
 - Aqua Security — Container Image Scanning  
   https://trivy.dev/docs/dev/guide/target/container_image/
 
+### Cosign
+
+- Cosign GitHub Repository
+  https://github.com/sigstore/cosign
+
+- Sigstore Cosign Documentation
+  https://docs.sigstore.dev/cosign/signing/overview/
+
+
 ### Connaisseur
 
 - Connaisseur Documentation  
@@ -2144,6 +2246,6 @@ cosign.key
 ```text
 Trivy                          ✅ COMPLETADO
 Connaisseur base               ✅ COMPLETADO
-Cosign                         ⏳ PENDIENTE
+Cosign                         ✅ COMPLETADO
 Integración Cosign-Connaisseur ⏳ PENDIENTE
 ```
