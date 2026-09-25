@@ -1,0 +1,58 @@
+USER-SUPPLIED VALUES:
+application:
+  features:
+    namespacedValidation:
+      mode: validate
+  policy:
+  - pattern: 192.168.56.104:5443/*:*
+    validator: local-cosign
+    with:
+      trustRoot: lab-key
+      verifyInTransparencyLog: false
+      verifySCT: false
+  - pattern: '*:*'
+    validator: deny
+  validators:
+  - approve: false
+    name: deny
+    type: static
+  - cert: |
+      -----BEGIN CERTIFICATE-----
+      MIIFETCCAvmgAwIBAgIUM2zIquoBp+625xactikAJztLMvgwDQYJKoZIhvcNAQEL
+      BQAwGDEWMBQGA1UEAwwNY29zaWduLWxhYi1jYTAeFw0yNjA5MjQxOTQ4MDRaFw0z
+      NjA5MjExOTQ4MDRaMBgxFjAUBgNVBAMMDWNvc2lnbi1sYWItY2EwggIiMA0GCSqG
+      SIb3DQEBAQUAA4ICDwAwggIKAoICAQCFeI1+ytB07Pmgff+hzVKUqzdOc2V2FLaw
+      j7B1wZSpvtolXf6rarKpXOFBGYnXk6+NtwAp5is3vP92QK/bGb3q9GDHwvrJI85w
+      Hq2EhqdPRt61a6/Ud5/p2l8J6EqQVA482B0FpvYJaER5sJzh5Ppt5hoWbwm7fTA8
+      Z9QhR39plJg1mtEgirHKtnEq3I9L+NqFpGIV92+Cux1XaHfJoSuuV9TBmv+rxSaH
+      dXLZZMP5dTGfoLJk49LZP3fYQOEPm/G5DcqLXse2C+iU53r56TAhNR3SCJT0YdSC
+      PfeSsjV6eShnzT4z9N6OwrXJ0Vo/wBtVuQ54kl78TU/9uESKeyuZGS3IbEDZeH0X
+      aTDcmCQZnLAFUjf4yWnrB0AgbTKvWng0tB6Ly0IizkbPGsC9ySP0RlZekRPF5Yk8
+      DBfQju6Au7uqrxw6izoxXF4GOKyRL+rMaxXsBkNWJxuGhMeLGiErn4CEVy/cx3fs
+      QhbeQ65VR4RDlYdkEMBfF6Bp501T3ayOReHJPX3cG/aVq35dqSKmAz3ycG4aaATc
+      LrZr2SZFjqHtflOMVnQ1QsmqZj8F9OBd5e5YhOfC4EWf/vb13BBBzwF1l42xAVXn
+      J/qEYdlnpDrEDhZuFwTzvZUMmjUPd1rheFRwW2zEg3QAaPFgHXlTmr+md7cD94Bk
+      pfC7kLDyvwIDAQABo1MwUTAdBgNVHQ4EFgQU9aJhKq0Wl4cJ3xZwS0vUzfoGOUsw
+      HwYDVR0jBBgwFoAU9aJhKq0Wl4cJ3xZwS0vUzfoGOUswDwYDVR0TAQH/BAUwAwEB
+      /zANBgkqhkiG9w0BAQsFAAOCAgEAgdzWPCIITbtExjvQkovGlKqgV2VLnExO3KVh
+      Xx8/C9ElnUyKx7ekZHn/vGz1eDYzBSxOwuEe61d430DBBjs0//qmUffgMj6lXg9V
+      zDnMib/vfxWA210gxiJgwM22Xebg8BuhEZuDGVyEVGRq2KA09cHnKHR9RmtvtxqH
+      wNVF4Fc47iXZahTx15V8/QB6ssX9l3GYawwfKGbdFOseBgGFYjKcz1eZ14YiRsSk
+      6rw/Kjt52vndtKpQesXBle+beVAE+FCWGbuX69DxAad3PjkqsAICBKrEXVRjYrFc
+      eHZEkNM8jz2YvKZ8ibY9GqnHzDuu8tjbWG+t+3DopsQewOGp3GR3sl0q77Ys+tJA
+      MUJtAfYRQh+4QBHXecptiugKngYZT4zvHZVCh2pEYCRUnTxnV3t9RZxgY3WKe7wn
+      xHRLvy3Cpk0sScGZKUO7l91tkX44m58d8h0S+oIwmSC4y4L6ZoztLLYH+s1RHRkX
+      fJI7M34gCweSb7/H0CaKrH1Hn0vNUzOwdESiwwWbuCD5skSeYAgUJZilDGDZaFad
+      yhLPHx3hZ1ZH2SFIvQ4he2e2vfwgzOhu0ChXVjgd3uNbmpnP3+SJ+ScH7Ycaqx2m
+      LSEy88hj3PlfwI+IWMzt3DHizGu5SIiaPfUCM55e31YL1EMJcSC4IeCX1JSN8W0F
+      gL5GAgI=
+      -----END CERTIFICATE-----
+    name: local-cosign
+    trustRoots:
+    - key: |
+        -----BEGIN PUBLIC KEY-----
+        MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEoyCPu/icHxPm2o/nI2K/BOAljHpM
+        vJ17oBuN4a2/XNP+H8K6Ig5kqQA0O/ljQrz0PQyFKiJ0+f6oHJjHwYutMA==
+        -----END PUBLIC KEY-----
+      name: lab-key
+    type: cosign

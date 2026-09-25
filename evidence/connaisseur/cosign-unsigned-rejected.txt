@@ -1,0 +1,1 @@
+Error from server: admission webhook "connaisseur-svc.connaisseur.svc" denied the request: error during cosign validation of image 192.168.56.104:5443/debian:unsigned-v1: error validating image: [no signatures found]

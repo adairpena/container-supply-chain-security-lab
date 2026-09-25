@@ -1,0 +1,2 @@
+NAME                 READY   STATUS    RESTARTS   AGE   IP            NODE       NOMINATED NODE   READINESS GATES
+cosign-signed-demo   1/1     Running   0          13m   10.244.1.26   worker02   <none>           <none>

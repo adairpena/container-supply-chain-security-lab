@@ -1,0 +1,76 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  annotations:
+    helm.sh/hook: post-install, post-upgrade, post-rollback
+  creationTimestamp: "2026-09-24T20:16:20Z"
+  generation: 1
+  labels:
+    app.kubernetes.io/instance: connaisseur
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/name: connaisseur
+    app.kubernetes.io/version: 3.13.0
+    helm.sh/chart: connaisseur-2.13.0
+  name: connaisseur-webhook
+  resourceVersion: "43278"
+  uid: 8e4932c6-004b-4bdd-84f9-6925b4a6e14b
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    caBundle: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURyVENDQXBXZ0F3SUJBZ0lSQUlrYWd2MDFLcG9qSElWRzZNNEsxdkV3RFFZSktvWklodmNOQVFFTEJRQXcKS2pFb01DWUdBMVVFQXhNZlkyOXVibUZwYzNObGRYSXRjM1pqTG1OdmJtNWhhWE56WlhWeUxuTjJZekFnRncweQpOakE1TWpNeE9USXhNamxhR0E4eU1USTJNRGd6TURFNU1qRXlPVm93S2pFb01DWUdBMVVFQXhNZlkyOXVibUZwCmMzTmxkWEl0YzNaakxtTnZibTVoYVhOelpYVnlMbk4yWXpDQ0FTSXdEUVlKS29aSWh2Y05BUUVCQlFBRGdnRVAKQURDQ0FRb0NnZ0VCQU5TQjZ5S1g2OU04OTAvd3JIRytMUkxNTkswOVUwa3QzczEwZkJzcWMvcWpQNHhGendSQgo1bEtaWjZGNSs1c3NIaTNpR1RQWThidmo3WlpSUjFnQWxvcjVMN2VhU3VjWVA1UXgrRjdGNTZHNkdRekp1azd4CkxVZjJlL3VWRFpaMm1keit5OXJTY2NUN0h5ZG5BRjQybXlqTUlHRU11MG9lQTVQSDJyZUJRNWozSExmNCtwS2cKTTZMVHJDcHVBMTdhZ3N6M25QcC9hRDhkdWNEUC9STW1wczU1S25yS3h1a0hZOUovWlJVQzlDRGUzTWNiVWVlVQo5YXZXaFExa1BoQUowNFBKVlA0VDNrQVhUUGJTSTBqVTlKTTVWODY3STN6cU9vZUl4SE0zWHhIVXUxVncvMnV3CjZTbXhHWHF3K2t4OUlZTlpNazZRdVdIRC9QZW5GTzhaeUVVQ0F3RUFBYU9CeXpDQnlEQU9CZ05WSFE4QkFmOEUKQkFNQ0JhQXdIUVlEVlIwbEJCWXdGQVlJS3dZQkJRVUhBd0VHQ0NzR0FRVUZCd01DTUF3R0ExVWRFd0VCL3dRQwpNQUF3Z1lnR0ExVWRFUVNCZ0RCK2dnOWpiMjV1WVdsemMyVjFjaTF6ZG1PQ0cyTnZibTVoYVhOelpYVnlMWE4yCll5NWpiMjV1WVdsemMyVjFjb0lmWTI5dWJtRnBjM05sZFhJdGMzWmpMbU52Ym01aGFYTnpaWFZ5TG5OMlk0SXQKWTI5dWJtRnBjM05sZFhJdGMzWmpMbU52Ym01aGFYTnpaWFZ5TG5OMll5NWpiSFZ6ZEdWeUxteHZZMkZzTUEwRwpDU3FHU0liM0RRRUJDd1VBQTRJQkFRQjNIdVFQenkvUWcwUWZIWHVQZ2xteWlTY3JrUVAwaHVmaU1vZ0VaSEdlClRScHo4OHd1c2hNc2JqbEdWbndHUk83NjFGSDBjSndJQ3pkRVRZb3pMYitnMW9oTWZEWDJKNFREanp2bmdKK24KUjYyVlo4ZzcxcmpUZjRnaUVnYW9hcjgzMmhXWlYzd1M5b0lXWnFIbG4xcXlmL2hqSFB6RmZWVXp5eFI5RnJ6egpLaWJyQWRRN2JodmUzSWNMMnNzWHRuTklqWUdBS2RKUXYwYTRnRGp1azlKVktkSXVCaWFDZ3VCTXlnTW93NFZUCk5RNmgvcUlLOUp1YzFhRmFEUVlmUmpiTEtndE1QUzZzRFNIdmhuako5QXRsb1d4ZXNNY05RMVRRYzdVcDJJQTEKQi9ic1ppc1p6alo0QTNZenozSk1EQmh5ZGwxcGhPYnpDYm1pZ3pjaGNVQXcKLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo=
+    service:
+      name: connaisseur-svc
+      namespace: connaisseur
+      path: /mutate
+      port: 443
+  failurePolicy: Fail
+  matchPolicy: Equivalent
+  name: connaisseur-svc.connaisseur.svc
+  namespaceSelector:
+    matchExpressions:
+    - key: securesystemsengineering.connaisseur/webhook
+      operator: In
+      values:
+      - validate
+  objectSelector: {}
+  reinvocationPolicy: Never
+  rules:
+  - apiGroups:
+    - apps
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - deployments
+    - replicasets
+    - daemonsets
+    - statefulsets
+    scope: '*'
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+    - pods/ephemeralcontainers
+    - replicationcontrollers
+    scope: '*'
+  - apiGroups:
+    - batch
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - jobs
+    - cronjobs
+    scope: '*'
+  sideEffects: None
+  timeoutSeconds: 30

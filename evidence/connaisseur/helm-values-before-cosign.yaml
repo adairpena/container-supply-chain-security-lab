@@ -1,0 +1,5 @@
+USER-SUPPLIED VALUES:
+application:
+  features:
+    namespacedValidation:
+      mode: validate

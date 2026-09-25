@@ -1,0 +1,723 @@
+DEMO EN VIVO — TRIVY + COSIGN + CONNAISSEUR
+====================================================
+
+Objetivo:
+  Ejecutar una demostración repetible y limpia para cubrir:
+
+  1. Explicar qué es Trivy y por qué es importante.
+  2. Escanear una imagen vulnerable.
+  3. Interpretar el reporte.
+  4. Explicar Cosign y chain of trust.
+  5. Firmar manualmente una imagen.
+  6. Intentar desplegar una imagen SIN firma -> debe FALLAR.
+  7. Desplegar una imagen FIRMADA -> debe FUNCIONAR.
+
+======================================================================
+A. PREPARACIÓN / PREFLIGHT
+======================================================================
+
+# 1) Entrar al proyecto
+cd /home/adair/proyecto-trivy-cosign
+
+# 2) Kubeconfig
+export KUBECONFIG=/etc/kubernetes/admin.conf
+
+# 3) Crear identificador ÚNICO.
+#    Esto evita reutilizar firmas anteriores.
+DEMO_ID="$(date +%Y%m%d%H%M%S)"
+echo "$DEMO_ID"
+
+# 4) Variables del laboratorio
+REGISTRY="192.168.56.104:5443"
+
+SIGNED_REPO="live-nginx-${DEMO_ID}"
+UNSIGNED_REPO="live-debian-${DEMO_ID}"
+
+SIGNED_TAG="v1"
+UNSIGNED_TAG="v1"
+
+SIGNED_REF="${REGISTRY}/${SIGNED_REPO}:${SIGNED_TAG}"
+UNSIGNED_REF="${REGISTRY}/${UNSIGNED_REPO}:${UNSIGNED_TAG}"
+
+SIGNED_POD="signed-${DEMO_ID}"
+UNSIGNED_POD="unsigned-${DEMO_ID}"
+
+EVIDENCE_DIR="evidence/live-demo/${DEMO_ID}"
+
+mkdir -p "$EVIDENCE_DIR"
+
+# 5) Mostrar variables
+printf '\nSIGNED_REF=%s\nUNSIGNED_REF=%s\nSIGNED_POD=%s\nUNSIGNED_POD=%s\n' \
+  "$SIGNED_REF" "$UNSIGNED_REF" "$SIGNED_POD" "$UNSIGNED_POD"
+
+# 6) Validar herramientas
+trivy --version
+cosign version
+podman --version
+skopeo --version
+kubectl version --client
+
+################### DESDE AQUÍ PODEMOS EMPEZAR LA PRESENTACIÓN ##############################
+# 7) Validar Kubernetes
+kubectl get nodes -o wide
+
+# 8) Validar Connaisseur
+helm list -n connaisseur
+kubectl get pods -n connaisseur -o wide
+kubectl get mutatingwebhookconfiguration connaisseur-webhook
+
+# 9) Validar namespace protegido
+kubectl get namespace supply-chain-demo --show-labels
+
+# Debe contener:
+# securesystemsengineering.connaisseur/webhook=validate
+
+# 10) Validar registry HTTPS
+curl -sS -o /dev/null \
+  -w 'Registry HTTP %{http_code}\n' \
+  "https://${REGISTRY}/v2/"
+
+# Esperado:
+# Registry HTTP 200
+
+# 11) Validar CA aplicada al Deployment Connaisseur
+kubectl get deployment connaisseur \
+  -n connaisseur \
+  -o jsonpath='{range .spec.template.spec.containers[?(@.name=="connaisseur")].env[*]}{.name}={.value}{"\n"}{end}'
+
+# Debe aparecer:
+# SSL_CERT_FILE=/etc/connaisseur-registry-ca/ca-bundle.crt
+
+# 12) Validar clave privada y pública
+ls -l keys_local/cosign.key keys_local/cosign.pub
+
+
+======================================================================
+B. QUÉ EXPLICAR SOBRE TRIVY
+======================================================================
+
+MENSAJE PARA DECIR EN LA PRESENTACIÓN:
+
+"Trivy es un scanner de seguridad para artefactos y entornos cloud-native.
+En este proyecto lo utilizamos antes del despliegue para conocer qué contiene
+una imagen y qué riesgos introduce. Nos permite revisar vulnerabilidades,
+generar SBOM y detectar secretos. Detectar una CVE no significa automáticamente
+que una imagen sea explotable; el resultado debe interpretarse considerando
+severidad, versión instalada, fix disponible, exposición y contexto."
+
+PUNTOS CLAVE:
+
+- Detecta vulnerabilidades conocidas.
+- Permite priorizar HIGH y CRITICAL.
+- Identifica paquete y versión afectada.
+- Muestra si existe FixedVersion.
+- Puede generar JSON, HTML y SBOM.
+- Puede detectar secretos.
+- Trivy responde: "¿qué riesgos contiene este artefacto?"
+
+======================================================================
+C. DEMO TRIVY — ESCANEO EN VIVO
+======================================================================
+
+# 1) Asegurar que la imagen vulnerable esté local.
+#    Si ya está local, no descarga nada.
+podman image exists docker.io/library/python:3.4-alpine \
+  || podman pull docker.io/library/python:3.4-alpine
+
+# 2) Preparar directorio de la demo
+mkdir -p "$EVIDENCE_DIR/trivy"
+
+# 3) Escaneo visible en pantalla
+trivy image \
+  --severity HIGH,CRITICAL \
+  python:3.4-alpine
+
+# Esperado:
+# Debe listar vulnerabilidades HIGH / CRITICAL si la DB disponible
+# contiene hallazgos para esta imagen antigua.
+
+# 4) Generar JSON para interpretar
+trivy image \
+  --severity HIGH,CRITICAL \
+  --format json \
+  -o "$EVIDENCE_DIR/trivy/python-3.4-alpine.json" \
+  python:3.4-alpine
+
+# 5) Verificar archivo
+ls -lh "$EVIDENCE_DIR/trivy/python-3.4-alpine.json"
+
+======================================================================
+D. INTERPRETAR EL REPORTE TRIVY
+======================================================================
+
+# 1) Conteo por severidad
+jq '
+  [
+    .Results[]?.Vulnerabilities[]?
+  ]
+  | group_by(.Severity)
+  | map({
+      severity: .[0].Severity,
+      total: length
+    })
+' "$EVIDENCE_DIR/trivy/python-3.4-alpine.json"
+
+# 2) Mostrar vulnerabilidades CRITICAL
+jq -r '
+  .Results[]?.Vulnerabilities[]?
+  | select(.Severity == "CRITICAL")
+  | [
+      .VulnerabilityID,
+      .PkgName,
+      .InstalledVersion,
+      (.FixedVersion // "SIN_FIX"),
+      .Severity
+    ]
+  | @tsv
+' "$EVIDENCE_DIR/trivy/python-3.4-alpine.json"
+
+# 3) Mostrar HIGH/CRITICAL con fix disponible
+jq -r '
+  .Results[]?.Vulnerabilities[]?
+  | select(
+      (.Severity == "HIGH" or .Severity == "CRITICAL")
+      and (.FixedVersion != null)
+      and (.FixedVersion != "")
+    )
+  | [
+      .VulnerabilityID,
+      .PkgName,
+      .InstalledVersion,
+      .FixedVersion,
+      .Severity
+    ]
+  | @tsv
+' "$EVIDENCE_DIR/trivy/python-3.4-alpine.json" \
+  | head -20
+
+MENSAJE PARA DECIR:
+
+"Los campos principales son:
+VulnerabilityID = CVE,
+PkgName = paquete afectado,
+InstalledVersion = versión vulnerable,
+FixedVersion = versión donde existe corrección,
+Severity = prioridad inicial.
+
+Nuestro criterio de aceptación del laboratorio es no promover una imagen con
+vulnerabilidades CRITICAL con parche disponible sin una decisión de riesgo
+documentada."
+
+======================================================================
+E. QUÉ EXPLICAR SOBRE COSIGN Y CHAIN OF TRUST
+======================================================================
+
+MENSAJE PARA DECIR:
+
+"Trivy nos dice qué riesgos contiene la imagen. Cosign resuelve otra pregunta:
+¿quién respalda criptográficamente este artefacto y sigue siendo exactamente
+el mismo contenido que fue firmado?
+
+La clave privada firma y debe permanecer protegida. La clave pública se utiliza
+para verificar. Connaisseur recibe esa clave pública como trust root y aplica
+la política dentro de Kubernetes."
+
+DIAGRAMA:
+
+  keys_local/cosign.key
+           |
+           | firma
+           v
+      Imagen / digest
+           |
+           v
+      Registry HTTPS
+           |
+           v
+  keys_local/cosign.pub
+           |
+           v
+        verify
+           |
+       +---+---+
+       |       |
+       v       v
+      OK      FAIL
+
+Cosign responde:
+  "¿esta firma corresponde a una clave en la que confío y a este digest?"
+
+======================================================================
+F. PREPARAR IMÁGENES NUEVAS PARA LA DEMO
+======================================================================
+
+# IMPORTANTE:
+# Usamos nombres de REPOSITORY únicos en cada ejecución.
+# Así garantizamos que el repositorio firmado no contiene firmas viejas.
+
+# 1) Asegurar imágenes locales
+podman image exists docker.io/library/nginx:latest \
+  || podman pull docker.io/library/nginx:latest
+
+podman image exists docker.io/library/debian:11 \
+  || podman pull docker.io/library/debian:11
+
+# 2) Etiquetar imágenes con repositories NUEVOS
+podman tag \
+  docker.io/library/nginx:latest \
+  "$SIGNED_REF"
+
+podman tag \
+  docker.io/library/debian:11 \
+  "$UNSIGNED_REF"
+
+# 3) Push de ambas imágenes al registry HTTPS
+podman push "$SIGNED_REF"
+podman push "$UNSIGNED_REF"
+
+# 4) Confirmar repositories en el registry
+curl -s "https://${REGISTRY}/v2/_catalog" | jq .
+
+# 5) Confirmar tags
+curl -s "https://${REGISTRY}/v2/${SIGNED_REPO}/tags/list" | jq .
+curl -s "https://${REGISTRY}/v2/${UNSIGNED_REPO}/tags/list" | jq .
+
+======================================================================
+G. DEMO COSIGN — DEMOSTRAR QUE INICIALMENTE NO EXISTE FIRMA
+======================================================================
+
+# 1) Obtener digest de la imagen que SÍ vamos a firmar
+SIGNED_DIGEST=$(skopeo inspect \
+  "docker://${SIGNED_REF}" \
+  | jq -r '.Digest')
+
+SIGNED_IMAGE="${REGISTRY}/${SIGNED_REPO}@${SIGNED_DIGEST}"
+
+echo "$SIGNED_DIGEST"
+echo "$SIGNED_IMAGE"
+
+# Guardar referencia
+echo "$SIGNED_IMAGE" \
+  > "$EVIDENCE_DIR/cosign-signed-image.txt"
+
+# 2) Verificar ANTES de firmar.
+#    ESTE COMANDO DEBE FALLAR.
+cosign verify \
+  --key keys_local/cosign.pub \
+  --new-bundle-format=false \
+  --insecure-ignore-tlog \
+  "$SIGNED_IMAGE"
+
+# Esperado:
+# Error: no signatures found
+#
+# Esto es un RESULTADO POSITIVO de la prueba:
+# demuestra que empezamos desde una imagen todavía no firmada.
+
+======================================================================
+H. DEMO COSIGN — FIRMA MANUAL
+======================================================================
+
+# Firmar en formato compatible con Connaisseur 3.13.0.
+#
+# Cosign local: 3.1.3
+# Connaisseur 3.13.0 incorpora Cosign v2.x.
+#
+# Por compatibilidad usamos formato legacy.
+
+cosign sign \
+  --key keys_local/cosign.key \
+  --new-bundle-format=false \
+  --registry-referrers-mode=legacy \
+  --use-signing-config=false \
+  --tlog-upload=false \
+  -y \
+  "$SIGNED_IMAGE"
+
+# Introducir la contraseña de keys_local/cosign.key.
+
+# Esperado:
+# Pushing signature to: 192.168.56.104:5443/<repo>
+
+# 1) Verificar con clave correcta
+cosign verify \
+  --key keys_local/cosign.pub \
+  --new-bundle-format=false \
+  --insecure-ignore-tlog \
+  "$SIGNED_IMAGE" \
+  | tee "$EVIDENCE_DIR/cosign-valid.txt"
+
+# Esperado:
+# The cosign claims were validated
+# The signatures were verified against the specified public key
+
+# 2) Mostrar tag .sig creado
+SIG_TAG="sha256-${SIGNED_DIGEST#sha256:}.sig"
+echo "$SIG_TAG"
+
+curl -s \
+  "https://${REGISTRY}/v2/${SIGNED_REPO}/tags/list" \
+  | jq .
+
+# Debe aparecer un tag:
+# sha256-....sig
+
+======================================================================
+I. OPCIONAL — DEMOSTRAR CLAVE INCORRECTA
+======================================================================
+
+# Si existe keys/cosign.pub y corresponde a otro par de claves:
+cosign verify \
+  --key keys/cosign.pub \
+  --new-bundle-format=false \
+  --insecure-ignore-tlog \
+  "$SIGNED_IMAGE"
+
+# Esperado:
+# FAIL
+# accepted signatures do not match threshold
+# Found: 0, Expected 1
+
+MENSAJE:
+
+"No basta con que exista una firma. Debe poder verificarse con una trust root
+aceptada."
+
+======================================================================
+J. DEMO KUBERNETES — IMAGEN SIN FIRMA DEBE FALLAR
+======================================================================
+
+# Antes de crear el Pod, confirmar manualmente que la imagen negativa no tiene firma:
+cosign verify \
+  --key keys_local/cosign.pub \
+  --new-bundle-format=false \
+  --insecure-ignore-tlog \
+  "$UNSIGNED_REF"
+
+# Esperado:
+# Error: no signatures found
+
+# Eliminar cualquier Pod homónimo, por seguridad.
+kubectl delete pod "$UNSIGNED_POD" \
+  -n supply-chain-demo \
+  --ignore-not-found
+
+# Intentar deploy.
+#
+# ESTE COMANDO DEBE FALLAR.
+kubectl run "$UNSIGNED_POD" \
+  -n supply-chain-demo \
+  --image="$UNSIGNED_REF" \
+  2>&1 | tee "$EVIDENCE_DIR/unsigned-deploy.txt"
+
+# Esperado:
+# admission webhook "connaisseur-svc.connaisseur.svc" denied the request
+# ...
+# no signatures found
+
+# Confirmar que NO existe Pod
+kubectl get pod "$UNSIGNED_POD" \
+  -n supply-chain-demo
+
+# Esperado:
+# Error from server (NotFound)
+
+MENSAJE PARA DECIR:
+
+"Kubernetes recibió la solicitud, pero antes de crear el Pod llamó al admission
+webhook. Connaisseur buscó una firma válida y no la encontró, por lo que el
+objeto fue rechazado. Containerd ni siquiera necesita iniciar el workload."
+
+======================================================================
+K. DEMO KUBERNETES — IMAGEN FIRMADA DEBE FUNCIONAR
+======================================================================
+
+# Eliminar cualquier intento anterior.
+kubectl delete pod "$SIGNED_POD" \
+  -n supply-chain-demo \
+  --ignore-not-found
+
+# Deploy de la imagen que acabamos de firmar.
+kubectl run "$SIGNED_POD" \
+  -n supply-chain-demo \
+  --image="$SIGNED_REF"
+
+# Esperado:
+# pod/<nombre> created
+
+# Esperar a Ready
+kubectl wait \
+  --for=condition=Ready \
+  "pod/${SIGNED_POD}" \
+  -n supply-chain-demo \
+  --timeout=120s
+
+# Mostrar estado
+kubectl get pod "$SIGNED_POD" \
+  -n supply-chain-demo \
+  -o wide \
+  | tee "$EVIDENCE_DIR/signed-pod.txt"
+
+# Esperado:
+# 1/1 Running
+
+======================================================================
+L. MOSTRAR TRUST PINNING
+======================================================================
+
+kubectl get pod "$SIGNED_POD" \
+  -n supply-chain-demo \
+  -o jsonpath='{.spec.containers[0].image}{"\n"}' \
+  | tee "$EVIDENCE_DIR/signed-pinned-image.txt"
+
+# Esperado:
+#
+# 192.168.56.104:5443/<repo>:v1@sha256:...
+#
+# Es decir:
+# solicitamos un TAG, pero Kubernetes terminó almacenando TAG + DIGEST.
+
+MENSAJE:
+
+"Connaisseur verificó la firma y fijó la referencia al digest validado.
+Esto evita depender únicamente de un tag mutable."
+
+======================================================================
+M. MOSTRAR LOGS DE CONNAISSEUR
+======================================================================
+
+kubectl logs \
+  -n connaisseur \
+  -l app.kubernetes.io/name=connaisseur \
+  --tail=500 \
+  | grep -Ei \
+  "${SIGNED_REPO}|${UNSIGNED_REPO}|validated|no signatures|cosign|error validating" \
+  | tee "$EVIDENCE_DIR/connaisseur-summary.txt"
+
+# En los logs debemos observar:
+#
+# - validación exitosa para la imagen firmada
+# - error / no signatures found para la imagen no firmada
+
+======================================================================
+N. RESUMEN DE EVIDENCIAS
+======================================================================
+
+{
+  echo "======================================"
+  echo "DEMO TRIVY + COSIGN + CONNAISSEUR"
+  echo "======================================"
+  echo
+  echo "DEMO_ID=${DEMO_ID}"
+  echo "SIGNED_REF=${SIGNED_REF}"
+  echo "UNSIGNED_REF=${UNSIGNED_REF}"
+  echo "SIGNED_IMAGE=${SIGNED_IMAGE}"
+  echo
+  echo "=== NODOS ==="
+  kubectl get nodes
+  echo
+  echo "=== CONNAISSEUR ==="
+  helm list -n connaisseur
+  echo
+  echo "=== POD FIRMADO ==="
+  kubectl get pod "$SIGNED_POD" -n supply-chain-demo -o wide
+  echo
+  echo "=== TRUST PINNING ==="
+  kubectl get pod "$SIGNED_POD" \
+    -n supply-chain-demo \
+    -o jsonpath='{.spec.containers[0].image}{"\n"}'
+  echo
+  echo "=== RECHAZO UNSIGNED ==="
+  cat "$EVIDENCE_DIR/unsigned-deploy.txt"
+} > "$EVIDENCE_DIR/demo-summary.txt"
+
+cat "$EVIDENCE_DIR/demo-summary.txt"
+
+======================================================================
+O. LIMPIEZA DE PODS
+======================================================================
+
+# Se eliminan únicamente los Pods de demostración.
+# Las imágenes/firma se conservan como evidencia.
+
+kubectl delete pod "$SIGNED_POD" \
+  -n supply-chain-demo \
+  --ignore-not-found
+
+kubectl delete pod "$UNSIGNED_POD" \
+  -n supply-chain-demo \
+  --ignore-not-found
+
+======================================================================
+P. GUION SUGERIDO DE 15–20 MINUTOS
+======================================================================
+
+00:00–02:00 — Objetivo
+----------------------
+Decir:
+
+"El objetivo es controlar la cadena de suministro antes de ejecutar un artefacto.
+Trivy analiza riesgo; Cosign prueba procedencia/integridad; Connaisseur hace
+enforcement dentro de Kubernetes."
+
+Mostrar:
+
+trivy --version
+cosign version
+kubectl get nodes
+helm list -n connaisseur
+
+02:00–06:00 — Trivy
+-------------------
+Ejecutar:
+
+trivy image \
+  --severity HIGH,CRITICAL \
+  python:3.4-alpine
+
+Explicar:
+- CVE
+- paquete
+- versión instalada
+- versión corregida
+- severidad
+
+06:00–08:00 — Interpretación
+----------------------------
+Ejecutar los jq del apartado D.
+
+Decir:
+
+"No todo hallazgo implica explotación inmediata. Se prioriza severidad,
+parche disponible, exposición y contexto."
+
+08:00–10:00 — Cosign / Chain of Trust
+-------------------------------------
+Mostrar:
+
+ls -l keys_local/cosign.key keys_local/cosign.pub
+
+Explicar:
+- privada = firma
+- pública = verifica
+- firma asociada al digest
+- Connaisseur recibe la pública como trust root
+
+10:00–12:00 — Firma manual
+--------------------------
+Crear repositorio nuevo, hacer push y demostrar:
+
+cosign verify ...   -> no signatures found
+cosign sign ...
+cosign verify ...   -> OK
+
+12:00–15:00 — Deploy sin firma
+------------------------------
+Ejecutar:
+
+kubectl run "$UNSIGNED_POD" \
+  -n supply-chain-demo \
+  --image="$UNSIGNED_REF"
+
+Resultado esperado:
+DENY / no signatures found
+
+15:00–18:00 — Deploy firmado
+----------------------------
+Ejecutar:
+
+kubectl run "$SIGNED_POD" \
+  -n supply-chain-demo \
+  --image="$SIGNED_REF"
+
+kubectl wait ...
+
+Resultado esperado:
+Running
+
+18:00–20:00 — Trust pinning / cierre
+------------------------------------
+Mostrar:
+
+kubectl get pod "$SIGNED_POD" \
+  -n supply-chain-demo \
+  -o jsonpath='{.spec.containers[0].image}{"\n"}'
+
+Cerrar con:
+
+"Trivy responde qué riesgo contiene el artefacto.
+Cosign responde si el artefacto tiene una firma verificable.
+Connaisseur decide si Kubernetes debe permitir su ejecución."
+
+======================================================================
+Q. TROUBLESHOOTING RÁPIDO
+======================================================================
+
+1) kubectl intenta localhost:8080
+--------------------------------
+export KUBECONFIG=/etc/kubernetes/admin.conf
+kubectl get nodes
+
+2) Registry no responde
+------------------------
+curl -v "https://${REGISTRY}/v2/"
+
+3) Connaisseur no está Running
+------------------------------
+kubectl get pods -n connaisseur -o wide
+
+kubectl logs \
+  -n connaisseur \
+  -l app.kubernetes.io/name=connaisseur \
+  --tail=200
+
+4) Error x509 unknown authority dentro de Connaisseur
+-----------------------------------------------------
+kubectl get deployment connaisseur \
+  -n connaisseur \
+  -o jsonpath='{range .spec.template.spec.containers[?(@.name=="connaisseur")].env[*]}{.name}={.value}{"\n"}{end}'
+
+Debe existir:
+
+SSL_CERT_FILE=/etc/connaisseur-registry-ca/ca-bundle.crt
+
+Comprobar ConfigMap:
+
+kubectl get configmap connaisseur-registry-ca \
+  -n connaisseur
+
+5) Cosign manual funciona pero Connaisseur dice "no signatures found"
+----------------------------------------------------------------------
+La firma debe crearse en formato compatible:
+
+cosign sign \
+  --key keys_local/cosign.key \
+  --new-bundle-format=false \
+  --registry-referrers-mode=legacy \
+  --use-signing-config=false \
+  --tlog-upload=false \
+  -y \
+  "$SIGNED_IMAGE"
+
+6) Imagen sin firma es aceptada inesperadamente
+-----------------------------------------------
+Verificar que el namespace tenga:
+
+kubectl get namespace supply-chain-demo --show-labels
+
+Debe incluir:
+
+securesystemsengineering.connaisseur/webhook=validate
+
+Revisar policy efectiva:
+
+helm get values connaisseur -n connaisseur
+
+7) El repository de demo ya tiene firma
+---------------------------------------
+NO reutilizar el repository.
+Generar un nuevo DEMO_ID:
+
+DEMO_ID="$(date +%Y%m%d%H%M%S)"
+
+y repetir con repositories nuevos.

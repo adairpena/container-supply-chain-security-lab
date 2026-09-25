@@ -1,0 +1,18 @@
+spec:
+  template:
+    spec:
+      volumes:
+        - name: registry-ca
+          configMap:
+            name: connaisseur-registry-ca
+
+      containers:
+        - name: connaisseur
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/connaisseur-registry-ca/ca-bundle.crt
+
+          volumeMounts:
+            - name: registry-ca
+              mountPath: /etc/connaisseur-registry-ca
+              readOnly: true

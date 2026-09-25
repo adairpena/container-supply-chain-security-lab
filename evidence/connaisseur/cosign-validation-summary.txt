@@ -1,0 +1,4 @@
+  "msg": "error validating Pod cosign-signed-demo: error during cosign validation of image 192.168.56.104:5443/nginx:adair-v1: error validating image: [no signatures found]",
+  "msg": "successfully validated image 192.168.56.104:5443/nginx:adair-v1 using rule 192.168.56.104:5443/*:* and validator local-cosign. Result is 192.168.56.104:5443/nginx:adair-v1@sha256:b08e790f45850744b630f4c50971ad29e64cead862757324797a1f9f2507f3dc.",
+  "msg": "error validating Pod cosign-unsigned-demo: error during cosign validation of image 192.168.56.104:5443/debian:unsigned-v1: error validating image: [no signatures found]",
+  "msg": "error validating Pod cosign-unsigned-demo: error during cosign validation of image 192.168.56.104:5443/debian:unsigned-v1: error validating image: [no signatures found]",

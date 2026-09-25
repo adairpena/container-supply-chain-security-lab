@@ -1,0 +1,49 @@
+{
+  "level": "info",
+  "msg": "Starting server at 127.0.0.1:5000...",
+  "time": "2026-09-24T21:00:02Z"
+}
+{
+  "level": "error",
+  "msg": "error validating Pod cosign-signed-demo: error during cosign validation of image 192.168.56.104:5443/nginx:adair-v1: error validating image: [no signatures found]",
+  "time": "2026-09-24T21:01:39Z"
+}
+{
+  "level": "info",
+  "msg": "successfully validated image 192.168.56.104:5443/nginx:adair-v1 using rule 192.168.56.104:5443/*:* and validator local-cosign. Result is 192.168.56.104:5443/nginx:adair-v1@sha256:b08e790f45850744b630f4c50971ad29e64cead862757324797a1f9f2507f3dc.",
+  "time": "2026-09-24T21:07:28Z"
+}
+{
+  "level": "error",
+  "msg": "error validating Pod cosign-unsigned-demo: error during cosign validation of image 192.168.56.104:5443/debian:unsigned-v1: error validating image: [no signatures found]",
+  "time": "2026-09-24T21:08:12Z"
+}
+{
+  "level": "info",
+  "msg": "Starting server at 127.0.0.1:5000...",
+  "time": "2026-09-24T21:00:14Z"
+}
+{
+  "level": "error",
+  "msg": "error validating Pod cosign-unsigned-demo: error during cosign validation of image 192.168.56.104:5443/debian:unsigned-v1: error validating image: [no signatures found]",
+  "time": "2026-09-24T21:21:26Z"
+}
+{
+  "level": "info",
+  "msg": "Starting server at 127.0.0.1:5000...",
+  "time": "2026-09-24T21:00:13Z"
+}
+1:C 24 Sep 2026 20:16:05.910 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+1:C 24 Sep 2026 20:16:05.910 * Redis version=7.4.5, bits=64, commit=00000000, modified=0, pid=1, just started
+1:C 24 Sep 2026 20:16:05.910 * Configuration loaded
+1:M 24 Sep 2026 20:16:05.911 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+1:M 24 Sep 2026 20:16:05.911 * monotonic clock: POSIX clock_gettime
+1:M 24 Sep 2026 20:16:05.911 * Running mode=standalone, port=6380.
+1:M 24 Sep 2026 20:16:05.914 * Server initialized
+1:M 24 Sep 2026 20:16:05.914 * Ready to accept connections tcp
+1:M 24 Sep 2026 20:16:05.914 * Ready to accept connections tls
+1:M 24 Sep 2026 21:16:06.032 * 1 changes in 3600 seconds. Saving...
+1:M 24 Sep 2026 21:16:06.032 * Background saving started by pid 4394
+4394:C 24 Sep 2026 21:16:06.040 * DB saved on disk
+4394:C 24 Sep 2026 21:16:06.041 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+1:M 24 Sep 2026 21:16:06.135 * Background saving terminated with success
